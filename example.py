@@ -1,6 +1,11 @@
+import os
 import glob
 import pandas as pd
 import octapy
+
+#create the data and output directories if they don't already exist
+#os.mkdir('data')
+#os.mkdir('output')
 
 # initialize the model
 release_file = 'release.csv'
