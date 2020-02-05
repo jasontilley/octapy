@@ -1,0 +1,7 @@
+__pycache__
+data/*
+HYCOM.py
+release.csv
+octapy/__pycache__
+output/*
+output.csv
