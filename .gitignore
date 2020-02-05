@@ -1,7 +1,0 @@
-.gitignore
-HYCOM.py
-__pycache__/
-data/*
-octapy/__pycache__/
-output/*
-release.csv
