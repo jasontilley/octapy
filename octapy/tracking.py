@@ -10,6 +10,7 @@ import cartopy.crs as ccrs
 from os import path
 from copy import deepcopy
 from scipy.interpolate import interpn
+from scipy.spatial import cKDTree
 from .tools import *
 
 
@@ -31,6 +32,9 @@ class Model():
                        ending time, and the frequency of the input data
     timestep -- a pandas.tseries.offsets object representing the timestep of the
                 tracking model (e.g., pandas.tseries.offsets.Hour(1))
+    interp -- interpolation method. Supported are 'linear', 'nearest',
+        'splinef2d', and 'idw'.
+    leafsize -- number of nearest neighbors for some interpolation schemes
     vert_migration -- if True, the particle will undergo daily vertical
                       migrations which will override w velocities
     vert_array -- an array of length 24 representing the depth of a particle
@@ -48,13 +52,13 @@ class Model():
     def __init__(self, release_file=None, model=None, submodel=None,
                  grid=None, data_dir='data', dir='forward', dims=2, depth=None,
                  extent=None, data_date_range=None,
-                 timestep = pd.tseries.offsets.Hour(1), vert_array=None,
-                 output_file=None, output_freq=pd.tseries.offsets.Hour(1)):
+                 timestep = pd.tseries.offsets.Hour(1), interp='linear',
+                 leafsize=9, vert_array=None, output_file=None,
+                 output_freq=pd.tseries.offsets.Hour(1)):
                  
         self.release_file = release_file
         self.model = model
         self.submodel = submodel
-        self.experiment = experiment
         self.grid = None
         self.data_dir = data_dir
         self.dir = dir
@@ -63,6 +67,8 @@ class Model():
         self.extent = extent
         self.data_date_range = data_date_range
         self.timestep = timestep
+        self.interp = interp
+        self.leafsize = leafsize
         self.vert_migration = False
         self.vert_array = vert_array
         self.output_file = output_file
@@ -83,7 +89,7 @@ class Model():
             self.model_dir = ('http://tds.hycom.org/thredds/dodsC/' +
                               self.submodel + '/' + str(year) + '/hrly')
                               
-        for date in (self.data_date_range + 1):
+        for date in (self.data_date_range + self.timestep):
             dt = pd.to_datetime(date)
             time_idx = np.where(dates == dt)[0][0]
             
@@ -159,6 +165,7 @@ class Particle():
         self.temp = None
         self.sal = None
         self.filepath = get_filepath(self.timestamp, model)
+        self.data = xr.open_dataset(self.filepath)
         
 
 class Grid():
@@ -173,7 +180,7 @@ class Grid():
     
     Attributes:
     src_crs -- a cartopy.crs projection object representing the data's source
-               projection
+               projection (e.g., cartopy.crs.LambertCylindrical())
     src_crs -- a cartopy.crs projection object representing the model's target
                projection
     file -- Name of the file from which the grid was produced.
@@ -182,6 +189,7 @@ class Grid():
     depths -- Depths of the grid
     x -- the x coordinates of the grid in meters
     y -- the y coordinates of the grid in meters
+    tree -- a scipy.spatial.cKDTree instance representing the grid
     
     '''
     
@@ -203,23 +211,26 @@ class Grid():
         self.lats = self.lats.T[0]
         self.x = transformed[0,:,0]
         self.y = transformed[:,0,1]
+        x, y = np.meshgrid(self.x, self.y)
+        xy_coords = np.array([x.ravel(), y.ravel()]).T
+        self.tree = cKDTree(xy_coords, leafsize=model.leafsize)
 
-def interp_physical(particle, model):
-
-    particle.u = interp3d(particle, model, 'u')
-    particle.v = interp3d(particle, model, 'v')
-    particle.temp = interp3d(particle, model, 'temperature')
-    particle.sal = interp3d(particle, model, 'salinity')
-    particle.w = None
-    if model.dims == 3:
-        particle.w = interp3d(particle, model, 'w_velocity')
-    return(particle)
+#def interp_physical(particle, model):
+#
+#    particle.u = interp3d(particle, model, 'u')
+#    particle.v = interp3d(particle, model, 'v')
+#    particle.temp = interp3d(particle, model, 'temperature')
+#    particle.sal = interp3d(particle, model, 'salinity')
+#    particle.w = None
+#    if model.dims == 3:
+#        particle.w = interp3d(particle, model, 'w_velocity')
+#    return(particle)
 
 
 def get_physical(particle, model):
 
     if path.isfile(particle.filepath):
-        particle = interp_physical(particle, model)
+        particle = interp3d(particle, model)
         
     # else find the two surrounding files
     else:
@@ -244,29 +255,38 @@ def get_physical(particle, model):
                 particle2.filepath = file2
                 break
                 
-        particle1 = interp_physical(particle1, model)
-        particle2 = interp_physical(particle2, model)
+        particle1 = interp3d(particle1, model)
+        particle2 = interp3d(particle2, model)
         particle = interp_for_time(model, particle, particle1, particle2)
     return(particle)
         
         
-def interp3d(particle, model, variable_str, method='linear'):
+def interp3d(particle, model):
 
-    if model.dims == 2:
-        points = np.array([model.grid.x, model.grid.y])
-        data = xr.open_dataset(particle.filepath)[variable_str].squeeze('MT')
-        data = data.data.T
-        value = interpn(points, data, (particle.x, particle.y),
-                        method=method)
+    if model.interp == 'idw':
+        print('Interpolation method unfinished')
+    
+    else:
+    
+        if model.dims == 2:
+            data_vars = ['u', 'v', 'temperature', 'salinity']
+            part_vars = ['u', 'v', 'temp', 'sal']
+            dim_tuple = (particle.x, particle.y)
+            points = np.array([model.grid.x, model.grid.y])
+            
+        if model.dims == 3:
+            data_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
+            part_vars = ['u', 'v', 'w', 'temp', 'sal']
+            dim_tuple = (particle.x, particle.y, particle.depth)
+            points = np.array([model.grid.x, model.grid.y, model.grid.depths])
+        
+        for i, j in zip(data_vars, part_vars):
+            data = particle.data[i].squeeze('MT').data.T
+            value = interpn(points, data, (particle.x, particle.y),
+                            method=model.interp)
+            setattr(particle, j, value.item())
                         
-    if model.dims == 3:
-        points = np.array([model.grid.x, model.grid.y, model.grid.depths])
-        data = xr.open_dataset(particle.filepath)[variable_str].squeeze('MT')
-        data = data.data.T
-        value = interpn(points, data, (particle.x, particle.y, particle.depth),
-                        method=method)
-                        
-    return(value.item())
+    return(particle)
 
 
 def interp_for_time(model, particle, particle1, particle2, method='linear'):
@@ -357,7 +377,16 @@ def run_model(model):
         trajectory.to_csv(release.iloc[i]['particle_id'] + '_'
                           + model.output_file, index=False)
             
-def interp_inverse_distance(dx, dy, re, kt, index)
+
+def interp_idw(particle, model, variable_str):
+
+    distances, indices = model.grid.tree.query([(particle.x,  particle.y)],
+                                               k=model.leafsize)
+    data = xr.open_dataset(particle.filepath)[variable_str].squeeze('MT')
+    data = data.data.ravel(indices)
+    return(particle)
+        
+#dx, dy, re, kt, index
         
 #dr=sqrt(dx^2+dy^2)
 #wt=1./dr              ;.....inverse distance

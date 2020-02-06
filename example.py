@@ -11,7 +11,8 @@ import octapy
 release_file = 'release.csv'
 model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0')
 model.data_date_range = pd.date_range('6/9/10', '7/7/10', freq='1H')
-model.timestep = pd.tseries.offsets.Minute(6)
+# currently, it is best that timestep <= data_date_range
+model.timestep = pd.tseries.offsets.Hour(1)
 model.depth = 15
 model.output_file = 'output.csv'
 
@@ -25,7 +26,7 @@ model.grid = octapy.Grid(model)
 octapy.tracking.run_model(model)
 
 # plot the output
-output_files = glob.glob('output/*output.csv')
+output_files = glob.glob('*output.csv')
 extent = octapy.tools.get_extent(model)
-octapy.tools.plot_csv_output(output_files, extent=extent, step=240)
+octapy.tools.plot_csv_output(output_files, extent=extent, step=4)
 
