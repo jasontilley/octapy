@@ -1,3 +1,6 @@
+#octapy – Ocean Connectivity and Tracking Algorithms
+#Copyright (C) 2020  Jason Tilley
+
 import enum
 import glob
 import numpy as np
@@ -11,16 +14,40 @@ from .tools import *
 
 
 class Model():
-    ''' A particle tracking model class
+    ''' A particle tracking Model object
     
     Keyword arguments:
-    release_file -- A file containing the particle coordinates and release times
-    extent -- a list of extent coordinates, ex: [minlat, maxlat, minlon, maxlon]
+    release_file -- a file containing the particle coordinates and release times
+    model -- name string of the ocean model used for input data (e.g, 'HYCOM')
+    submodel -- name string of the submodel and/or experiment used for input
+                data (e.g, 'GOMl0.04/expt_31.0')
+    grid -- location of the model Grid class object
+    data_dir -- data directory path
+    dir -- forcing direction through time. Must be 'forward' or 'backward'
+    dims -- dimensionality of the model, must be 2 or 3
+    depth -- forcing depth if the model is 2-dimensional
+    extent -- a list of extent coordinates as [minlat, maxlat, minlon, maxlon]
+    data_date_range -- a pandas.date_range object containing the starting time,
+                       ending time, and the frequency of the input data
+    timestep -- a pandas.tseries.offsets object representing the timestep of the
+                tracking model (e.g., pandas.tseries.offsets.Hour(1))
+    vert_migration -- if True, the particle will undergo daily vertical
+                      migrations which will override w velocities
+    vert_array -- an array of length 24 representing the depth of a particle
+                  over a 24-hour period when vert_mirgration is set to True
+    output_file = base output file name
+    output_freq = a pandas.tseries.offsets object representing how often the
+                  particle data will be output to the output file
+                  (e.g., pandas.tseries.offsets.Hour(1))
+                  
+    Returns:
+    A Model object
+    
     '''
     
     def __init__(self, release_file=None, model=None, submodel=None,
-                 experiment=None, grid=None, data_dir='data', dir='forward',
-                 dims=2, depth=None, extent=None, data_date_range=None,
+                 grid=None, data_dir='data', dir='forward', dims=2, depth=None,
+                 extent=None, data_date_range=None,
                  timestep = pd.tseries.offsets.Hour(1), vert_array=None,
                  output_file=None, output_freq=pd.tseries.offsets.Hour(1)):
                  
@@ -36,6 +63,7 @@ class Model():
         self.extent = extent
         self.data_date_range = data_date_range
         self.timestep = timestep
+        self.vert_migration = False
         self.vert_array = vert_array
         self.output_file = output_file
         self.output_freq = output_freq
@@ -47,11 +75,11 @@ class Model():
             dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
                                   freq=self.data_date_range.freq)
             depths = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0,
-                      50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0, 150.0, 200.0,
-                      250.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0,
-                      1000.0, 1100.0, 1200.0, 1300.0, 1400.0, 1500.0, 1750.0,
-                      2000.0, 2500.0, 3000.0, 3500.0, 4000.0, 4500.0, 5000.0,
-                      5500.0])
+                               50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0,
+                               150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 600.0,
+                               700.0, 800.0, 900.0,1000.0, 1100.0, 1200.0,
+                               1300.0, 1400.0, 1500.0, 1750.0, 2000.0, 2500.0,
+                               3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
             self.model_dir = ('http://tds.hycom.org/thredds/dodsC/' +
                               self.submodel + '/' + str(year) + '/hrly')
                               
@@ -144,6 +172,10 @@ class Grid():
     A Grid object
     
     Attributes:
+    src_crs -- a cartopy.crs projection object representing the data's source
+               projection
+    src_crs -- a cartopy.crs projection object representing the model's target
+               projection
     file -- Name of the file from which the grid was produced.
     lats -- Latitudes of the grid
     lons -- Longitudes of the grid
@@ -325,9 +357,18 @@ def run_model(model):
         trajectory.to_csv(release.iloc[i]['particle_id'] + '_'
                           + model.output_file, index=False)
             
-
+def interp_inverse_distance(dx, dy, re, kt, index)
         
-        
+#dr=sqrt(dx^2+dy^2)
+#wt=1./dr              ;.....inverse distance
+#;...wt=exp(-dr^2/re^2)     ;......gaussian
+#u1=total(wt*u(kt,index))/total(wt)
+#v1=total(wt*v(kt,index))/total(wt)
+#;
+#u2=total(wt*u(kt+1,index))/total(wt)
+#v2=total(wt*v(kt+1,index))/total(wt)
+#un=timefact*(u2-u1)+u1
+#vn=timefact*(v2-v1)+v1
 
 
         

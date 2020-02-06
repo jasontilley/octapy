@@ -1,3 +1,6 @@
+#octapy – Ocean Connectivity and Tracking Algorithms
+#Copyright (C) 2020  Jason Tilley
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
