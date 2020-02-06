@@ -26,6 +26,7 @@ class Model():
     data_dir -- data directory path
     dir -- forcing direction through time. Must be 'forward' or 'backward'
     dims -- dimensionality of the model, must be 2 or 3
+    data_vars -- the variable names in the data file
     depth -- forcing depth if the model is 2-dimensional
     extent -- a list of extent coordinates as [minlat, maxlat, minlon, maxlon]
     data_date_range -- a pandas.date_range object containing the starting time,
@@ -50,10 +51,10 @@ class Model():
     '''
     
     def __init__(self, release_file=None, model=None, submodel=None,
-                 grid=None, data_dir='data', dir='forward', dims=2, depth=None,
-                 extent=None, data_date_range=None,
-                 timestep = pd.tseries.offsets.Hour(1), interp='linear',
-                 leafsize=9, vert_array=None, output_file=None,
+                 grid=None, data_dir='data', dir='forward', dims=2,
+                 data_vars = None, depth=None, extent=None,
+                 data_date_range=None, timestep = pd.tseries.offsets.Hour(1),
+                 interp='linear', leafsize=9, vert_array=None, output_file=None,
                  output_freq=pd.tseries.offsets.Hour(1)):
                  
         self.release_file = release_file
@@ -63,6 +64,15 @@ class Model():
         self.data_dir = data_dir
         self.dir = dir
         self.dims = dims
+        
+        if self.dims == 2:
+            self.data_vars = ['u', 'v', 'temperature', 'salinity']
+            self.part_vars = ['u', 'v', 'temp', 'sal']
+            
+        if self.dims == 3:
+            self.data_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
+            self.part_vars = ['u', 'v', 'w', 'temp', 'sal']
+            
         self.depth = depth
         self.extent = extent
         self.data_date_range = data_date_range
@@ -142,6 +152,7 @@ class Particle():
     Attributes:
     x -- the x coordinate in meters
     y -- the y coordinate in meters
+    coord_tuple -- a tuple of the particle coordinates in meters
     u -- the u-velocity (eastward velocity) at the particle's location
     v -- the v-velocity (northward velocity) at the particle's location
     w -- the w-velocity (upward velocity) at the particle's location
@@ -159,6 +170,13 @@ class Particle():
         self.timestamp = timestamp
         self.x, self.y = model.grid.tgt_crs.transform_point(self.lon, self.lat,
                                                             model.grid.src_crs)
+                                                            
+        if model.dims == 2:
+            self.coord_tuple = (self.x, self.y)
+            
+        if model.dims == 3:
+            self.coord_tuple = (self.x, self.y, self.depth)
+            
         self.u = None
         self.v = None
         self.w = None
@@ -183,12 +201,13 @@ class Grid():
                projection (e.g., cartopy.crs.LambertCylindrical())
     src_crs -- a cartopy.crs projection object representing the model's target
                projection
-    file -- Name of the file from which the grid was produced.
-    lats -- Latitudes of the grid
-    lons -- Longitudes of the grid
-    depths -- Depths of the grid
+    file -- name of the file from which the grid was produced.
+    lats -- latitudes of the grid
+    lons -- longitudes of the grid
+    depths -- depths of the grid
     x -- the x coordinates of the grid in meters
     y -- the y coordinates of the grid in meters
+    points -- an array of grid coordinates in meters
     tree -- a scipy.spatial.cKDTree instance representing the grid
     
     '''
@@ -212,6 +231,13 @@ class Grid():
         self.x = transformed[0,:,0]
         self.y = transformed[:,0,1]
         x, y = np.meshgrid(self.x, self.y)
+        
+        if model.dims == 2:
+            self.points = np.array([self.x, self.y])
+            
+        if model.dims == 3:
+            self.points = np.array([self.x, self.y, self.depths])
+        
         xy_coords = np.array([x.ravel(), y.ravel()]).T
         self.tree = cKDTree(xy_coords, leafsize=model.leafsize)
 
@@ -264,25 +290,14 @@ def get_physical(particle, model):
 def interp3d(particle, model):
 
     if model.interp == 'idw':
-        print('Interpolation method unfinished')
+    
+        particle = interp_idw(particle, model, power=1.0)
     
     else:
-    
-        if model.dims == 2:
-            data_vars = ['u', 'v', 'temperature', 'salinity']
-            part_vars = ['u', 'v', 'temp', 'sal']
-            dim_tuple = (particle.x, particle.y)
-            points = np.array([model.grid.x, model.grid.y])
-            
-        if model.dims == 3:
-            data_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
-            part_vars = ['u', 'v', 'w', 'temp', 'sal']
-            dim_tuple = (particle.x, particle.y, particle.depth)
-            points = np.array([model.grid.x, model.grid.y, model.grid.depths])
         
-        for i, j in zip(data_vars, part_vars):
+        for i, j in zip(model.data_vars, model.part_vars):
             data = particle.data[i].squeeze('MT').data.T
-            value = interpn(points, data, (particle.x, particle.y),
+            value = interpn(model.grid.points, data, particle.coord_tuple,
                             method=model.interp)
             setattr(particle, j, value.item())
                         
@@ -295,14 +310,10 @@ def interp_for_time(model, particle, particle1, particle2, method='linear'):
                           particle2.timestamp.to_julian_date()])
     xi = particle.timestamp.to_julian_date()
     
-    for i in ['u', 'v', 'temp', 'sal']:
+    for i in model.part_vars:
         value = np.interp(xi, points, np.array([particle1.__getattribute__(i),
                                                 particle2.__getattribute__(i)]))
         setattr(particle, i, value)
-        
-    if model.dims == 3:
-        value = np.interp(xi, points, np.array([particle1.w, particle2.w]))
-        setattr(particle, 'w', value)
         
     return(particle)
     
@@ -378,26 +389,19 @@ def run_model(model):
                           + model.output_file, index=False)
             
 
-def interp_idw(particle, model, variable_str):
+def interp_idw(particle, model, power=1.0):
 
     distances, indices = model.grid.tree.query([(particle.x,  particle.y)],
                                                k=model.leafsize)
-    data = xr.open_dataset(particle.filepath)[variable_str].squeeze('MT')
-    data = data.data.ravel(indices)
+    weights = 1. / distances ** power
+    
+    for i, j in zip(model.data_vars, model.part_vars):
+        data = particle.data.squeeze('MT')[i]
+        data = data.data.ravel()[indices]
+        value = (weights * data).sum() / weights.sum()
+        setattr(particle, j, value)
+        
     return(particle)
-        
-#dx, dy, re, kt, index
-        
-#dr=sqrt(dx^2+dy^2)
-#wt=1./dr              ;.....inverse distance
-#;...wt=exp(-dr^2/re^2)     ;......gaussian
-#u1=total(wt*u(kt,index))/total(wt)
-#v1=total(wt*v(kt,index))/total(wt)
-#;
-#u2=total(wt*u(kt+1,index))/total(wt)
-#v2=total(wt*v(kt+1,index))/total(wt)
-#un=timefact*(u2-u1)+u1
-#vn=timefact*(v2-v1)+v1
 
 
 
