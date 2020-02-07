@@ -2,28 +2,33 @@
 #Copyright (C) 2020  Jason Tilley
 
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from os.path import splitext
+from numba import jit
 
-def get_filepath(timestamp, model):
+def get_filepath(datetime64, model):
     ''' Get the filename for a given timestep
     
     Keyword arguments:
-    time -- A pandas Timestamp instance
+    datetime64 -- a numpy.datetime64 object for the data's time
     model -- the oceanographic model being used
-    submodel -- the submodel being used
+    
     '''
-    date_str = timestamp.strftime('%Y%m%d%H%M%S')
-    filepath = (model.data_dir + '/' + (date_str + '.' + model.model + '.' +
-                                        model.submodel.replace('/', '.') +
-                                        '.nc'))
+    datetime64s = datetime64.astype('datetime64[m]') + np.timedelta64(30, 'm')
+    datetime64s = datetime64s.astype('datetime64[h]')
+    datetime64s = datetime64s.astype('datetime64[s]')
+    filepath = (model.data_dir + '/'
+                + (''.join(filter(lambda x: x.isdigit(), str(datetime64)))
+                + '.' + model.model + '.' + model.submodel.replace('/', '.')
+                + '.nc'))
     return(filepath)
     
     
-def get_extent(model):
-    extent = [model.grid.lons.min(), model.grid.lons.max(),
-              model.grid.lats.min(), model.grid.lats.max()]
+def get_extent(grid):
+    extent = [grid.lons.min(), grid.lons.max(),
+              grid.lats.min(), grid.lats.max()]
     return(extent)
 
 

@@ -1,6 +1,8 @@
 import os
 import glob
+import numpy as np
 import pandas as pd
+import xarray as xr
 import octapy
 
 #create the data and output directories if they don't already exist
@@ -9,29 +11,33 @@ import octapy
 
 # initialize the model
 release_file = 'release.csv'
-model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0')
-model.data_date_range = pd.date_range('6/9/10', '7/7/10', freq='1H')
+model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
+                              interp='idw')
+
+# the data has one file for each hour (use minutes as unit)
+data_start = np.datetime64('2010-06-09')
+data_stop = np.datetime64('2010-07-07')
+model.data_freq = np.timedelta64(60,'m')
+
+model.data_date_range = np.arange(data_start, data_stop, step=model.data_freq)
+
+# enter the timestep as a np.timedelta64
 # currently, it is best that timestep <= data_date_range
-model.timestep = pd.tseries.offsets.Hour(1)
-model.interp = 'idw'
+model.timestep = np.timedelta64(60,'m')
+
 model.depth = 15
 model.output_file = 'output.csv'
 
 #download the data
-model.download_data()
+octapy.tracking.download_data(model)
 
 # initialize the grid
-model.grid = octapy.Grid(model)
+grid = octapy.Grid(model)
 
 # run the model
-octapy.tracking.run_model(model)
+octapy.tracking.run_model(model, grid)
 
 # plot the output
 output_files = glob.glob('*output.csv')
-extent = octapy.tools.get_extent(model)
+extent = octapy.tools.get_extent(grid)
 octapy.tools.plot_csv_output(output_files, extent=extent, step=24)
-
-
-
-
-# particle = octapy.Particle(model, 28., -88., 15., model.data_date_range[0])
