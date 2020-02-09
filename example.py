@@ -17,7 +17,7 @@ model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
 # the data has one file for each hour (use minutes as unit)
 data_start = np.datetime64('2010-06-09')
 data_stop = np.datetime64('2010-07-07')
-model.data_freq = np.timedelta64(60,'m')
+model.data_freq = np.timedelta64(1440,'m')
 
 model.data_date_range = np.arange(data_start, data_stop, step=model.data_freq)
 

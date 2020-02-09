@@ -241,10 +241,18 @@ def download_data(model):
                            3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
         model_dir = ('http://tds.hycom.org/thredds/dodsC/' +
                      model.submodel + '/' + str(year) + '/hrly')
-                          
-    for date in (model.data_date_range + model.timestep):
-        dt = pd.to_datetime(date)
-        time_idx = np.where(dates == dt)[0][0]
+    
+    model.data_date_range = np.append(model.data_date_range,
+                                      model.data_date_range[-1]
+                                      + model.data_freq)
+    for date in model.data_date_range:
+        #dt = pd.to_datetime(date, 'm')
+        
+        try:
+            time_idx = np.where(dates == date)[0][0]
+            
+        except IndexError:
+            continue
         
         if model.depth != None:
             depth_idx = np.where(depths == model.depth)[0][0]
