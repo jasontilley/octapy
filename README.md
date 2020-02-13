@@ -1,5 +1,4 @@
-# Example Package
+# octapy
+## Ocean Connectivity and Tracking Algorithms
 
-This is a simple example package. You can use
-[Github-flavored Markdown](https://guides.github.com/features/mastering-markdown/)
-to write your content.
+This package is pre-release and currently under maintenance.
