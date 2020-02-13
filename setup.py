@@ -8,8 +8,6 @@ from Cython.Build import cythonize
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-#sources = ['octapy/data.pyx', 'octapy/data.cpp']
-
 extensions = [Extension("octapy.*", ["octapy/data.pyx"],
                         language='c++', include_dirs=[np.get_include()]),
               Extension("octapy.*", ["octapy/interp_idw.pyx"],
