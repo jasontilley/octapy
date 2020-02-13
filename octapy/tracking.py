@@ -13,6 +13,8 @@ from numba import jit, jitclass, types, typed
 from scipy.interpolate import interpn
 from scipy.spatial import cKDTree
 from .tools import *
+from .data import Data
+from . import interp_idw
 
 
 @jitclass([('release_file', types.unicode_type),
@@ -204,22 +206,22 @@ class Particle():
         self.filepath = None
 
 
-@jitclass([('datetime64', types.optional(types.NPDatetime('m'))),
-           ('u', types.optional(types.float32[:,:,:,:])),
-           ('v', types.optional(types.float32[:,:,:,:])),
-           ('w', types.optional(types.float32[:,:,:,:])),
-           ('temp', types.optional(types.float32[:,:,:,:])),
-           ('sal', types.optional(types.float32[:,:,:,:]))])
-class Data():
-
-    def __init__(self, particle):
-        
-        self.datetime64 = None
-        self.u = None
-        self.v = None
-        self.w = None
-        self.temp = None
-        self.sal = None
+#@jitclass([('datetime64', types.optional(types.NPDatetime('m'))),
+#           ('u', types.optional(types.float32[:,:,:,:])),
+#           ('v', types.optional(types.float32[:,:,:,:])),
+#           ('w', types.optional(types.float32[:,:,:,:])),
+#           ('temp', types.optional(types.float32[:,:,:,:])),
+#           ('sal', types.optional(types.float32[:,:,:,:]))])
+#class Data():
+#
+#    def __init__(self, particle):
+#
+#        self.datetime64 = None
+#        self.u = None
+#        self.v = None
+#        self.w = None
+#        self.temp = None
+#        self.sal = None
     
 
 def transform(src_crs, tgt_crs, lon, lat):
@@ -440,28 +442,28 @@ def run_model(model, grid):
                           + model.output_file, index=False)
             
             
-def interp_idw(particle, grid, model, power=1.0):
-
-    distances, indices = grid.tree.query([(particle.x,  particle.y)],
-                                         k=model.leafsize)
-    weights = 1. / distances ** power
-    
-    if model.dims == 2:
-        nc_vars = ['u', 'v', 'temperature', 'salinity']
-        part_vars = ['u', 'v', 'temp', 'sal']
-        
-    if model.dims == 3:
-        nc_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
-        part_vars = ['u', 'v', 'w', 'temp', 'sal']
-    
-    rootgrp = xr.open_dataset(particle.filepath)
-    data = Data(particle)
-    
-    for i, j in zip(nc_vars, part_vars):
-        setattr(data, j, rootgrp[i].values)
-        values = data.__getattribute__(j).ravel()[indices][0]
-        value = (weights * values).sum() / weights.sum()
-        setattr(particle, j, value)
-        
-    return(particle)
+#def interp_idw(particle, grid, model, power=1.0):
+#
+#    distances, indices = grid.tree.query([(particle.x,  particle.y)],
+#                                         k=model.leafsize)
+#    weights = 1. / distances ** power
+#
+#    if model.dims == 2:
+#        nc_vars = ['u', 'v', 'temperature', 'salinity']
+#        part_vars = ['u', 'v', 'temp', 'sal']
+#
+#    if model.dims == 3:
+#        nc_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
+#        part_vars = ['u', 'v', 'w', 'temp', 'sal']
+#
+#    rootgrp = xr.open_dataset(particle.filepath)
+#    data = Data(particle)
+#
+#    for i, j in zip(nc_vars, part_vars):
+#        setattr(data, j, rootgrp[i].values)
+#        values = data.__getattribute__(j).ravel()[indices][0]
+#        value = (weights * values).sum() / weights.sum()
+#        setattr(particle, j, value)
+#
+#    return(particle)
 
