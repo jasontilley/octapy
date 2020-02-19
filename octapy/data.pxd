@@ -1,14 +1,10 @@
-#import numpy as np
-#cimport numpy as np
+from libcpp.vector cimport vector
+ctypedef struct _Data "Data":
 
-cdef extern from "data extern.cpp":
-    pass
+    vector[long] datetime
+    vector[double] u
+    vector[double] v
+    vector[double] w
+    vector[double] temp
+    vector[double] sal
 
-cdef extern from "data extern.h":
-
-    cppclass _Data "Data":
-        
-        long datetime[1]
-        double u, v, w, temp, sal
-        Data() except +
-        _Data(long*, double, double, double, double, double) except +

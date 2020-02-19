@@ -9,7 +9,9 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 extensions = [Extension("octapy.*", ["octapy/data.pyx"],
-                        language='c++', include_dirs=[np.get_include()]),
+                        language='c++', #extra_compile_args=['-lboost'],
+                        include_dirs=[np.get_include(), '/opt/local/include'],
+                        library_dirs=['/opt/local/lib']),
               Extension("octapy.*", ["octapy/interp_idw.pyx"],
                         language='c++', include_dirs=[np.get_include()])]
 
@@ -22,6 +24,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jasontilley/octapy",
+    #os.environ["CC"] = "clang",
     packages=setuptools.find_packages(),
     package_data={"octapy": ["*.pxd"]},
     cmdclass={'build_ext': build_ext},

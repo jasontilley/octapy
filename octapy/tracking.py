@@ -1,20 +1,17 @@
 #octapy – Ocean Connectivity and Tracking Algorithms
 #Copyright (C) 2020  Jason Tilley
 
-import enum
 import glob
-import numpy as np
-import pandas as pd
-import xarray as xr
-import cartopy.crs as ccrs
 from os import path
-from copy import deepcopy
-from numba import jit, jitclass, types, typed
+
+import xarray as xr
+from numba import jitclass, types
 from scipy.interpolate import interpn
 from scipy.spatial import cKDTree
-from .tools import *
+
 from .data import Data
-from . import interp_idw
+from .interp_idw import interp_idw
+from .tools import *
 
 
 @jitclass([('release_file', types.unicode_type),
@@ -26,8 +23,8 @@ from . import interp_idw
            ('depth', types.optional(types.float32)),
            ('extent', types.optional(types.ListType(types.float32))),
            ('data_date_range', types.optional(types.NPDatetime('m')[:])),
-           ('data_freq', types.NPTimedelta('m')),
            ('timestep', types.optional(types.NPTimedelta('m'))),
+           ('data_timestep', types.NPTimedelta('m')),
            ('interp', types.unicode_type),
            ('leafsize', types.int32),
            ('vert_migration', types.boolean),
@@ -49,9 +46,12 @@ class Model():
     depth -- forcing depth if the model is 2-dimensional
     extent -- a list of extent coordinates as [minlat, maxlat, minlon, maxlon]
     data_date_range -- a numpy.ndarray object of numpy.datetime64 objects
-                       containing the dates of the input data
+                       containing the dates of the input data. WARNING: Must
+                       match frequency of data
     timestep -- a numpy.timedelta64 object representing the timestep of the
                 tracking model in minutes (e.g., np.timedelta64(60,'m'))
+    data_timestep -- a numpy.timedelta64 object representing the timestep of the
+                data to be downloaded in minutes (e.g., np.timedelta64(60,'m'))
     interp -- interpolation method. Supported are 'linear', 'nearest',
         'splinef2d', and 'idw'.
     leafsize -- number of nearest neighbors for some interpolation schemes
@@ -71,12 +71,11 @@ class Model():
     
     def __init__(self, release_file=None, model=None, submodel=None,
                  data_dir='data', dir='forward', dims=2,
-                 #data_vars = None,
-                 depth=None, extent=None,
-                 data_date_range=None, data_freq = np.timedelta64(60,'m'),
-                 timestep=np.timedelta64(60,'m'), interp='linear', leafsize=9,
-                 vert_migration=False, vert_array=None, output_file=None,
-                 output_freq=np.timedelta64(60,'m')):
+                 depth=None, extent=None, data_date_range=None,
+                 timestep=np.timedelta64(60,'m'),
+                 data_timestep=np.timedelta64(60,'m'), interp='linear',
+                 leafsize=9, vert_migration=False, vert_array=None,
+                 output_file=None, output_freq=np.timedelta64(60,'m')):
                  
         self.release_file = release_file
         self.model = model
@@ -88,6 +87,7 @@ class Model():
         self.extent = extent
         self.data_date_range = data_date_range
         self.timestep = timestep
+        self.data_timestep = data_timestep
         self.interp = interp
         self.leafsize = leafsize
         self.vert_migration = vert_migration
@@ -152,18 +152,18 @@ class Grid():
         self.tree = cKDTree(xy_coords, leafsize=model.leafsize)
 
 
-@jitclass([('lat', types.float32),
-           ('lon', types.float32),
-           ('depth', types.float32),
-           ('timestamp', types.NPDatetime('s')),
-           ('x', types.optional(types.float32)),
-           ('y', types.optional(types.float32)),
-           ('u', types.optional(types.float32)),
-           ('v', types.optional(types.float32)),
-           ('w', types.optional(types.float32)),
-           ('temp', types.optional(types.float32)),
-           ('sal', types.optional(types.float32)),
-           ('filepath', types.optional(types.unicode_type))])
+# @jitclass([('lat', types.float32),
+#            ('lon', types.float32),
+#            ('depth', types.float32),
+#            ('timestamp', types.NPDatetime('s')),
+#            ('x', types.optional(types.float32)),
+#            ('y', types.optional(types.float32)),
+#            ('u', types.optional(types.float32)),
+#            ('v', types.optional(types.float32)),
+#            ('w', types.optional(types.float32)),
+#            ('temp', types.optional(types.float32)),
+#            ('sal', types.optional(types.float32)),
+#            ('filepath', types.optional(types.unicode_type))])
 class Particle():
     ''' A Particle object
     
@@ -190,7 +190,8 @@ class Particle():
     
     '''
     
-    def __init__(self, lat, lon, depth, timestamp):
+    def __init__(self, lat, lon, depth, timestamp, x=None, y=None, u=None,
+                 v=None, w=None, temp=None, sal=None, filepath=None):
     
         self.lat = lat
         self.lon = lon
@@ -206,23 +207,21 @@ class Particle():
         self.filepath = None
 
 
-#@jitclass([('datetime64', types.optional(types.NPDatetime('m'))),
-#           ('u', types.optional(types.float32[:,:,:,:])),
-#           ('v', types.optional(types.float32[:,:,:,:])),
-#           ('w', types.optional(types.float32[:,:,:,:])),
-#           ('temp', types.optional(types.float32[:,:,:,:])),
-#           ('sal', types.optional(types.float32[:,:,:,:]))])
-#class Data():
-#
-#    def __init__(self, particle):
-#
-#        self.datetime64 = None
-#        self.u = None
-#        self.v = None
-#        self.w = None
-#        self.temp = None
-#        self.sal = None
-    
+def deepcopy(particle):
+
+    particle_copy = Particle(particle.lat, particle.lon, particle.depth,
+                             particle.timestamp)
+    particle_copy.x = particle.x
+    particle_copy.y = particle.y
+    particle_copy.u = particle.u
+    particle_copy.v = particle.v
+    particle_copy.w = particle.w
+    particle_copy.temp = particle.temp
+    particle_copy.sal = particle.sal
+    particle_copy.filepath = particle.filepath
+
+    return(particle_copy)
+
 
 def transform(src_crs, tgt_crs, lon, lat):
     x, y = tgt_crs.transform_point(lon, lat, src_crs)
@@ -233,8 +232,9 @@ def download_data(model):
 
     if model.submodel == 'GOMl0.04/expt_31.0':
         year = model.data_date_range[0].item().year
+        # make a list of available datetimes to download
         dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
-                              freq=pd.Timedelta(model.data_freq))
+                              freq=pd.Timedelta(model.data_timestep))
         depths = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0,
                            50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0,
                            150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 600.0,
@@ -243,12 +243,13 @@ def download_data(model):
                            3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
         model_dir = ('http://tds.hycom.org/thredds/dodsC/' +
                      model.submodel + '/' + str(year) + '/hrly')
-    
+
+    # append one additional data time step
     model.data_date_range = np.append(model.data_date_range,
                                       model.data_date_range[-1]
-                                      + model.data_freq)
+                                      + model.data_timestep)
+
     for date in model.data_date_range:
-        #dt = pd.to_datetime(date, 'm')
         
         try:
             time_idx = np.where(dates == date)[0][0]
@@ -303,7 +304,7 @@ def get_physical(particle, grid, model):
             file1 = get_filepath(np.datetime64(new_timestamp, 's'), model)
             if path.isfile(file1):
                 particle1 = deepcopy(particle)
-                particle1.timestamp = new_timestamp
+                particle1.timestamp = np.datetime64(new_timestamp, 's')
                 particle1.filepath = file1
                 break
                 
@@ -313,7 +314,7 @@ def get_physical(particle, grid, model):
             file2 = get_filepath(np.datetime64(new_timestamp, 's'), model)
             if path.isfile(file2):
                 particle2 = deepcopy(particle)
-                particle2.timestamp = new_timestamp
+                particle2.timestamp = np.datetime64(new_timestamp, 's')
                 particle2.filepath = file2
                 break
                 
@@ -356,11 +357,22 @@ def interp3d(particle, grid, model):
 
 def interp_for_time(model, particle, particle1, particle2, method='linear'):
 
-    points = np.array([particle1.timestamp.to_julian_date(),
-                          particle2.timestamp.to_julian_date()])
-    xi = particle.timestamp.to_julian_date()
-    
-    for i in model.part_vars:
+    points = np.array([particle1.timestamp.astype(np.int_),
+                       particle2.timestamp.astype(np.int_)])
+    xi = particle.timestamp.astype(np.int_)
+
+    if model.dims == 2:
+
+        nc_vars = ['u', 'v', 'temperature', 'salinity']
+        part_vars = ['u', 'v', 'temp', 'sal']
+
+    if model.dims == 3:
+
+        nc_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
+        part_vars = ['u', 'v', 'w', 'temp', 'sal']
+
+    for i in part_vars:
+
         value = np.interp(xi, points, np.array([particle1.__getattribute__(i),
                                                 particle2.__getattribute__(i)]))
         setattr(particle, i, value)
@@ -440,30 +452,4 @@ def run_model(model, grid):
             
         trajectory.to_csv(release.iloc[i]['particle_id'] + '_'
                           + model.output_file, index=False)
-            
-            
-#def interp_idw(particle, grid, model, power=1.0):
-#
-#    distances, indices = grid.tree.query([(particle.x,  particle.y)],
-#                                         k=model.leafsize)
-#    weights = 1. / distances ** power
-#
-#    if model.dims == 2:
-#        nc_vars = ['u', 'v', 'temperature', 'salinity']
-#        part_vars = ['u', 'v', 'temp', 'sal']
-#
-#    if model.dims == 3:
-#        nc_vars = ['u', 'v', 'w_velocity', 'temperature', 'salinity']
-#        part_vars = ['u', 'v', 'w', 'temp', 'sal']
-#
-#    rootgrp = xr.open_dataset(particle.filepath)
-#    data = Data(particle)
-#
-#    for i, j in zip(nc_vars, part_vars):
-#        setattr(data, j, rootgrp[i].values)
-#        values = data.__getattribute__(j).ravel()[indices][0]
-#        value = (weights * values).sum() / weights.sum()
-#        setattr(particle, j, value)
-#
-#    return(particle)
 

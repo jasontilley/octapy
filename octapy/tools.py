@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from os.path import splitext
-from numba import jit
+
 
 def get_filepath(datetime64, model):
     ''' Get the filename for a given timestep
