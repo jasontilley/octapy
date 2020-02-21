@@ -2,10 +2,9 @@ import glob
 import numpy as np
 import octapy
 
-
-#create the data and output directories if they don't already exist
-#os.mkdir('data')
-#os.mkdir('output')
+# create the data and output directories if they don't already exist
+# os.mkdir('data')
+# os.mkdir('output')
 
 # initialize the model
 release_file = 'release.csv'
@@ -15,7 +14,7 @@ model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
 # the data has one file for each hour (use minutes as unit)
 data_start = np.datetime64('2010-06-09')
 data_stop = np.datetime64('2010-07-07')
-model.data_timestep = np.timedelta64(360,'m')
+model.data_timestep = np.timedelta64(360, 'm')
 
 # enter the timestep as a np.timedelta64
 # currently, it is best that timestep <= data_date_range
@@ -29,7 +28,7 @@ model.data_date_range = np.arange(data_start, data_stop,
 model.depth = 15
 model.output_file = 'output.csv'
 
-#download the data
+# download the data
 octapy.tracking.download_data(model)
 
 # initialize the grid
@@ -42,3 +41,9 @@ octapy.tracking.run_model(model, grid)
 output_files = glob.glob('*output.csv')
 extent = octapy.tools.get_extent(grid)
 octapy.tools.plot_csv_output(output_files, extent=extent, step=8)
+
+# example for initializing a particle
+# from octapy.tracking import Particle, transform
+# particle = Particle(28., -88., 15., np.datetime64('2010-06-08', 's'))
+# particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
+#                                    particle.lon, particle.lat)

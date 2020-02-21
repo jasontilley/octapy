@@ -8,12 +8,9 @@ from Cython.Build import cythonize
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-extensions = [Extension("octapy.*", ["octapy/data.pyx"],
-                        language='c++', #extra_compile_args=['-lboost'],
-                        include_dirs=[np.get_include(), '/opt/local/include'],
-                        library_dirs=['/opt/local/lib']),
-              Extension("octapy.*", ["octapy/interp_idw.pyx"],
-                        language='c++', include_dirs=[np.get_include()])]
+extensions = [Extension("octapy.*", ["octapy/interp_idw.pyx"],
+                        language='c++', include_dirs=[np.get_include(),
+                                                      '/opt/local/include'])]
 
 setuptools.setup(
     name='octapy',
@@ -28,7 +25,9 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     package_data={"octapy": ["*.pxd"]},
     cmdclass={'build_ext': build_ext},
-    ext_modules=cythonize(extensions, compiler_directives={'language_level': '3'}),
+    ext_modules=cythonize(extensions,
+                          compiler_directives={'language_level': '3'},
+                          annotate=True),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
