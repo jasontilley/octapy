@@ -5,8 +5,9 @@ import glob
 from os import path
 
 import xarray as xr
+import cartopy.crs as ccrs
 from netCDF4 import Dataset
-from numba import jitclass, types
+from numba import jitclass, jit, types
 from scipy.interpolate import interpn
 from scipy.spatial import cKDTree
 
@@ -95,6 +96,18 @@ class Model():
         self.output_freq = output_freq
 
 
+# @jitclass([('src_crs', types.pyobject),
+#            ('tgt_crs', types.pyobject),
+#            ('file', types.unicode_type),
+#            ('lats', types.float32[:]),
+#            ('lons', types.float32[:]),
+#            ('depths', types.float32[:]),
+#            ('x', types.float32[:]),
+#            ('y', types.float32[:]),
+#            ('points', types.float32[:]),
+#            ('tree', types.pyobject),
+#            ('Dataset', types.pyobject)])
+
 class Grid():
     ''' A Grid object. You must have already downloaded the data into the data
     directory.
@@ -151,10 +164,10 @@ class Grid():
         self.tree = cKDTree(xy_coords, leafsize=model.leafsize)
 
 
-@jitclass([('lat', types.float32),
-           ('lon', types.float32),
-           ('depth', types.float32),
-           ('timestamp', types.NPDatetime('s')),
+@jitclass([('lat', types.optional(types.float32)),
+           ('lon', types.optional(types.float32)),
+           ('depth', types.optional(types.float32)),
+           ('timestamp', types.optional(types.NPDatetime('s'))),
            ('x', types.optional(types.float32)),
            ('y', types.optional(types.float32)),
            ('u', types.optional(types.float32)),
@@ -189,26 +202,29 @@ class Particle():
     
     '''
 
-    def __init__(self, lat, lon, depth, timestamp, x=None, y=None, u=None,
-                 v=None, w=None, temp=None, sal=None, filepath=None):
+    def __init__(self, lat=None, lon=None, depth=None, timestamp=None, x=None,
+                 y=None, u=None, v=None, w=None, temp=None, sal=None,
+                 filepath=None):
         self.lat = lat
         self.lon = lon
         self.depth = depth
         self.timestamp = timestamp
-        self.x = None
-        self.y = None
-        self.u = None
-        self.v = None
-        self.w = None
-        self.temp = None
-        self.sal = None
-        self.filepath = None
+        self.x = x
+        self.y = y
+        self.u = u
+        self.v = v
+        self.w = w
+        self.temp = temp
+        self.sal = sal
+        self.filepath = filepath
 
 
 def deepcopy(particle):
-
-    particle_copy = Particle(particle.lat, particle.lon, particle.depth,
-                             particle.timestamp)
+    particle_copy = Particle()
+    particle_copy.lat = particle.lat
+    particle_copy.lon = particle.lon
+    particle_copy.depth = particle.depth
+    particle_copy.timestamp = particle.timestamp
     particle_copy.x = particle.x
     particle_copy.y = particle.y
     particle_copy.u = particle.u
@@ -222,13 +238,11 @@ def deepcopy(particle):
 
 
 def transform(src_crs, tgt_crs, lon, lat):
-
     x, y = tgt_crs.transform_point(lon, lat, src_crs)
     return (x, y)
 
 
 def download_data(model):
-
     if model.submodel == 'GOMl0.04/expt_31.0':
         year = model.data_date_range[0].item().year
         # make a list of available datetimes to download
@@ -259,7 +273,8 @@ def download_data(model):
         if model.depth != None:
             depth_idx = np.where(depths == model.depth)[0][0]
 
-        ncfile = get_filepath(date.astype('datetime64[s]'), model)
+        ncfile = get_filepath(date.astype('datetime64[s]'), model.model,
+                              model.submodel, model.data_dir)
 
         if path.isfile(ncfile):
             print('File already exists!')
@@ -290,16 +305,16 @@ def download_data(model):
 
 
 def get_physical(particle, grid, model):
-
     if path.isfile(particle.filepath):
         particle = interp3d(particle, grid, model)
 
     # else find the two surrounding files
     else:
 
-        for i in range(0, 24):
+        for i in range(1, 24):
             new_timestamp = particle.timestamp - np.timedelta64(i, 'h')
-            file1 = get_filepath(new_timestamp, model)
+            file1 = get_filepath(new_timestamp, model.model, model.submodel,
+                                 model.data_dir)
             if path.isfile(file1):
                 particle1 = deepcopy(particle)
                 particle1.timestamp = new_timestamp
@@ -308,7 +323,8 @@ def get_physical(particle, grid, model):
 
         for i in range(1, 24):
             new_timestamp = particle.timestamp + np.timedelta64(i, 'h')
-            file2 = get_filepath(new_timestamp, model)
+            file2 = get_filepath(new_timestamp, model.model, model.submodel,
+                                 model.data_dir)
             if path.isfile(file2):
                 particle2 = deepcopy(particle)
                 particle2.timestamp = new_timestamp
@@ -317,21 +333,21 @@ def get_physical(particle, grid, model):
 
         particle1 = interp3d(particle1, grid, model)
         particle2 = interp3d(particle2, grid, model)
-        particle = interp_for_time(model, particle, particle1, particle2)
+        particle = interp_for_time(particle, particle1, particle2,
+                                   dims=model.dims)
 
     return (particle)
 
 
 def interp3d(particle, grid, model):
-
     if model.interp == 'idw':
 
-        particle = interp_idw(particle, grid, model, power=1.0)
+        particle = interp_idw(particle, grid, dims=model.dims,
+                              leafsize=model.leafsize, power=1.0)
 
     else:
 
         rootgrp = Dataset(particle.filepath)
-
         particle.u = interpn(grid.points, rootgrp['u'][0].T,
                              (particle.x, particle.y),
                              method=model.interp).item()
@@ -356,28 +372,60 @@ def interp3d(particle, grid, model):
     return (particle)
 
 
-def interp_for_time(model, particle, particle1, particle2, method='linear'):
+# @jit(Particle.class_type.instance_type(Particle.class_type.instance_type,
+#                                        Grid.class_type.instance_type,
+#                                        Model.class_type.instance_type,
+#                                        types.float32))
+# def interp_idw(particle, grid, model, power=1.0):
+#
+#     distances, indices = grid.tree.query([(particle.x, particle.y)],
+#                                          k=model.leafsize)
+#     weights = (1. / distances[0] ** power)
+#
+#     rootgrp = Dataset(particle.filepath)
+#
+#     # read in the flattened data
+#     u = rootgrp['u'][0].ravel()[indices][0]
+#     setattr(particle, 'u', sum(weights * u) / sum(weights))
+#
+#     v = rootgrp['v'][0].ravel()[indices][0]
+#     setattr(particle, 'v', sum(weights * v) / sum(weights))
+#
+#     temp = rootgrp['temperature'][0].ravel()[indices][0]
+#     setattr(particle, 'temp', sum(weights * temp) / sum(weights))
+#
+#     sal = rootgrp['salinity'][0].ravel()[indices][0]
+#     setattr(particle, 'sal', sum(weights * sal) / sum(weights))
+#
+#     if model.dims == 3:
+#         w = rootgrp['w_velocity'][0].ravel()[indices][0]
+#         setattr(particle, 'w', sum(weights * w) / sum(weights))
+#
+#     return (particle)
 
+
+def interp_for_time(particle, particle1, particle2, dims=2, method='linear'):
     points = np.array([particle1.timestamp.astype(np.int_),
                        particle2.timestamp.astype(np.int_)])
     xi = particle.timestamp.astype(np.int_)
 
-    if model.dims == 2:
-        part_vars = ['u', 'v', 'temp', 'sal']
+    u = np.interp(xi, points, np.array([particle1.u, particle2.u]))
+    particle.u = u
+    v = np.interp(xi, points, np.array([particle1.v, particle2.v]))
+    particle.v = v
+    temp = np.interp(xi, points, np.array([particle1.temp, particle2.temp]))
+    particle.temp = temp
+    sal = np.interp(xi, points, np.array([particle1.sal, particle2.sal]))
+    particle.sal = sal
 
-    if model.dims == 3:
-        part_vars = ['u', 'v', 'w', 'temp', 'sal']
-
-    for i in part_vars:
-        value = np.interp(xi, points, np.array([particle1.__getattribute__(i),
-                                                particle2.__getattribute__(i)]))
-        setattr(particle, i, value)
+    if dims == 3:
+        u = np.interp(xi, points, np.array([particle1.u, particle2.u]))
+        particle.u = u
 
     return (particle)
 
 
 def force_particle(particle, grid, model):
-
     if model.dir == 'forward':
         i = 1
 
@@ -387,25 +435,25 @@ def force_particle(particle, grid, model):
     particle.x = particle.x + model.timestep.item().seconds * particle.u * i
     particle.y = particle.y + model.timestep.item().seconds * particle.v * i
 
-    transformed = grid.src_crs.transform_point(particle.x, particle.y,
-                                               grid.tgt_crs)
-    particle.lat = transformed[1]
-    particle.lon = transformed[0]
+    # transformed = grid.src_crs.transform_point(particle.x, particle.y,
+    #                                            grid.tgt_crs)
+    # particle.lat = transformed[1]
+    # particle.lon = transformed[0]
 
     if model.dims == 3:
         particle.depth = (particle.depth + model.timestep.item().seconds
                           * particle.w * i)
 
     particle.timestamp = particle.timestamp + model.timestep * i
-    particle.filepath = get_filepath(particle.timestamp, model)
+    particle.filepath = get_filepath(particle.timestamp, model.model,
+                                     model.submodel, model.data_dir)
     particle = get_physical(particle, grid, model)
 
     return (particle)
 
 
 def add_row_to_arr(arr, particle):
-
-    row = np.array([particle.timestamp, particle.lat, particle.lon,
+    row = np.array([particle.timestamp, particle.y, particle.x,
                     particle.depth, particle.u, particle.v, particle.w,
                     particle.temp, particle.sal])
     arr = np.vstack([arr, row])
@@ -414,7 +462,6 @@ def add_row_to_arr(arr, particle):
 
 
 def run_model(model, grid):
-
     release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
                             dtype=[('particle_id', 'S8'),
                                    ('start_lat', 'f8'),
@@ -438,20 +485,26 @@ def run_model(model, grid):
                                    int(np.atleast_1d(release['days'])[i]
                                        * 24 * 60), 'm'),
                                model.timestep)
+        particle = Particle(lat, lon, depth)
+        particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
+                                           particle.lon, particle.lat)
         for j in date_range:
-            particle = Particle(lat, lon, depth, j)
-            particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
-                                               particle.lon, particle.lat)
-            particle.filepath = get_filepath(particle.timestamp, model)
+            particle.timestamp = j
+            particle.filepath = get_filepath(j, model.model,
+                                             model.submodel, model.data_dir)
             # if j.tolist().hour == 0:
             #     print('getting physical data for ' + str(j))
             particle = get_physical(particle, grid, model)
             trajectory = add_row_to_arr(trajectory, particle)
             particle = force_particle(particle, grid, model)
-            lat = particle.lat
-            lon = particle.lon
-            depth = particle.depth
 
         trajectory = pd.DataFrame(trajectory[1::], columns=trajectory[0])
+        transformed = grid.src_crs.transform_points(grid.tgt_crs,
+                                                    np.array(trajectory['lon']),
+                                                    np.array(trajectory['lat'])).T
+        trajectory['lat'] = transformed[1]
+        trajectory['lon'] = transformed[0]
         trajectory.to_csv(np.atleast_1d(release)['particle_id'][i].astype(str)
                           + '_' + model.output_file, index=False)
+
+
