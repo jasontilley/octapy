@@ -27,4 +27,4 @@ def interp_idw(particle, grid, int dims=2, int leafsize=3, float power=1.0):
         w = rootgrp['w_velocity'][0].ravel()[indices][0]
         particle.w = sum(weights * w) / sum(weights)
 
-    return(particle)
+    return particle

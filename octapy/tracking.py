@@ -4,22 +4,24 @@
 import glob
 from os import path
 
+import numpy as np
+import pandas as pd
 import xarray as xr
 import cartopy.crs as ccrs
 from netCDF4 import Dataset
-from numba import jitclass, jit, types
+from numba import jitclass, types
 from scipy.interpolate import interpn
-from scipy.spatial import cKDTree
+from scipy.spatial.ckdtree import cKDTree
 
 from .interp_idw import interp_idw
-from .tools import *
+from octapy.tools import get_filepath
 
 
 @jitclass([('release_file', types.unicode_type),
            ('model', types.unicode_type),
            ('submodel', types.unicode_type),
            ('data_dir', types.unicode_type),
-           ('dir', types.unicode_type),
+           ('direction', types.unicode_type),
            ('dims', types.uint8),
            ('depth', types.optional(types.float32)),
            ('extent', types.optional(types.ListType(types.float32))),
@@ -32,16 +34,16 @@ from .tools import *
            ('vert_array', types.optional(types.float32[24])),
            ('output_file', types.optional(types.unicode_type)),
            ('output_freq', types.NPTimedelta('m'))])
-class Model():
-    ''' A particle tracking Model object
-    
+class Model:
+    """ A particle tracking Model object
+
     Keyword arguments:
     release_file -- a file containing the particle coordinates and release times
     model -- name string of the ocean model used for input data (e.g, 'HYCOM')
     submodel -- name string of the submodel and/or experiment used for input
                 data (e.g, 'GOMl0.04/expt_31.0')
     data_dir -- data directory path
-    dir -- forcing direction through time. Must be 'forward' or 'backward'
+    direction -- forcing direction through time. Must be 'forward' or 'backward'
     dims -- dimensionality of the model, must be 2 or 3
     data_vars -- an numpy.ndarray of the variable names in the data file
     depth -- forcing depth if the model is 2-dimensional
@@ -64,14 +66,14 @@ class Model():
     output_freq = a numpy.timedelta64 object representing how often the
                   particle data will be output to the output file in minutes
                   (e.g., np.timedelta64(60,'m'))
-                  
+
     Returns:
     A Model object
-    
-    '''
+
+    """
 
     def __init__(self, release_file=None, model=None, submodel=None,
-                 data_dir='data', dir='forward', dims=2,
+                 data_dir='data', direction='forward', dims=2,
                  depth=None, extent=None, data_date_range=None,
                  timestep=np.timedelta64(60, 'm'),
                  data_timestep=np.timedelta64(60, 'm'), interp='linear',
@@ -81,7 +83,7 @@ class Model():
         self.model = model
         self.submodel = submodel
         self.data_dir = data_dir
-        self.dir = dir
+        self.direction = direction
         self.dims = dims
         self.depth = depth
         self.extent = extent
@@ -108,8 +110,8 @@ class Model():
 #            ('tree', types.pyobject),
 #            ('Dataset', types.pyobject)])
 
-class Grid():
-    ''' A Grid object. You must have already downloaded the data into the data
+class Grid:
+    """ A Grid object. You must have already downloaded the data into the data
     directory.
 
     Keyword arguments:
@@ -132,7 +134,7 @@ class Grid():
     points -- an array of grid coordinates in meters
     tree -- a scipy.spatial.cKDTree instance representing the grid
 
-    '''
+    """
 
     def __init__(self, model):
 
@@ -176,19 +178,19 @@ class Grid():
            ('temp', types.optional(types.float32)),
            ('sal', types.optional(types.float32)),
            ('filepath', types.optional(types.unicode_type))])
-class Particle():
-    ''' A Particle object
-    
+class Particle:
+    """ A Particle object
+
     Keyword arguments:
     lat -- Latitude of the particle
     lon -- Longitude of the particle
     depth -- Depth of the particle in meters
     timestamp -- a numpy.datetime64 instance representing the time of the
                  particle
-    
+
     Returns:
     A Particle object
-    
+
     Attributes:
     x -- the x coordinate in meters
     y -- the y coordinate in meters
@@ -199,8 +201,8 @@ class Particle():
     temp -- the temperature at the particle's location
     sal -- the salinity at the particle's location
     filepath -- the expected file path given the particles timestamp
-    
-    '''
+
+    """
 
     def __init__(self, lat=None, lon=None, depth=None, timestamp=None, x=None,
                  y=None, u=None, v=None, w=None, temp=None, sal=None,
@@ -234,12 +236,12 @@ def deepcopy(particle):
     particle_copy.sal = particle.sal
     particle_copy.filepath = particle.filepath
 
-    return (particle_copy)
+    return particle_copy
 
 
 def transform(src_crs, tgt_crs, lon, lat):
     x, y = tgt_crs.transform_point(lon, lat, src_crs)
-    return (x, y)
+    return x, y
 
 
 def download_data(model):
@@ -254,8 +256,8 @@ def download_data(model):
                            700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0,
                            1300.0, 1400.0, 1500.0, 1750.0, 2000.0, 2500.0,
                            3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
-        model_dir = ('http://tds.hycom.org/thredds/dodsC/' +
-                     model.submodel + '/' + str(year) + '/hrly')
+        model_dir = ('http://tds.hycom.org/thredds/dodsC/' + model.submodel
+                     + '/' + str(year) + '/hrly')
 
     # append one additional data time step
     model.data_date_range = np.append(model.data_date_range,
@@ -270,7 +272,7 @@ def download_data(model):
         except IndexError:
             continue
 
-        if model.depth != None:
+        if model.depth is not None:
             depth_idx = np.where(depths == model.depth)[0][0]
 
         ncfile = get_filepath(date.astype('datetime64[s]'), model.model,
@@ -336,7 +338,7 @@ def get_physical(particle, grid, model):
         particle = interp_for_time(particle, particle1, particle2,
                                    dims=model.dims)
 
-    return (particle)
+    return particle
 
 
 def interp3d(particle, grid, model):
@@ -369,7 +371,7 @@ def interp3d(particle, grid, model):
                                  (particle.x, particle.y),
                                  method=model.interp).item()
 
-    return (particle)
+    return particle
 
 
 # @jit(Particle.class_type.instance_type(Particle.class_type.instance_type,
@@ -404,7 +406,7 @@ def interp3d(particle, grid, model):
 #     return (particle)
 
 
-def interp_for_time(particle, particle1, particle2, dims=2, method='linear'):
+def interp_for_time(particle, particle1, particle2, dims=2):
     points = np.array([particle1.timestamp.astype(np.int_),
                        particle2.timestamp.astype(np.int_)])
     xi = particle.timestamp.astype(np.int_)
@@ -422,14 +424,14 @@ def interp_for_time(particle, particle1, particle2, dims=2, method='linear'):
         u = np.interp(xi, points, np.array([particle1.u, particle2.u]))
         particle.u = u
 
-    return (particle)
+    return particle
 
 
 def force_particle(particle, grid, model):
-    if model.dir == 'forward':
+    if model.direction == 'forward':
         i = 1
 
-    if model.dir == 'backward':
+    if model.direction == 'backward':
         i = -1
 
     particle.x = particle.x + model.timestep.item().seconds * particle.u * i
@@ -449,7 +451,7 @@ def force_particle(particle, grid, model):
                                      model.submodel, model.data_dir)
     particle = get_physical(particle, grid, model)
 
-    return (particle)
+    return particle
 
 
 def add_row_to_arr(arr, particle):
@@ -458,7 +460,7 @@ def add_row_to_arr(arr, particle):
                     particle.temp, particle.sal])
     arr = np.vstack([arr, row])
 
-    return (arr)
+    return arr
 
 
 def run_model(model, grid):
@@ -506,5 +508,3 @@ def run_model(model, grid):
         trajectory['lon'] = transformed[0]
         trajectory.to_csv(np.atleast_1d(release)['particle_id'][i].astype(str)
                           + '_' + model.output_file, index=False)
-
-
