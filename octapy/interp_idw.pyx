@@ -4,7 +4,7 @@ from netCDF4 import Dataset
 def interp_idw(particle, grid, int dims=2, int leafsize=3, float power=1.0):
 
     distances, indices = grid.tree.query([(particle.x,  particle.y)],
-                                         k=leafsize)
+                                         k=leafsize, n_jobs=-1)
     weights = (1. / distances[0] ** power)
 
     rootgrp = Dataset(particle.filepath)

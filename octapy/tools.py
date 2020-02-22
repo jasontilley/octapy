@@ -32,14 +32,26 @@ def get_extent(grid):
     return extent
 
 
-def plot_csv_output(file_list, extent, step=2):
+def plot_csv_output(file_list, extent, step=2, plot_type='lines', colors=None):
     ax = plt.axes(projection=ccrs.PlateCarree())
     ax.coastlines(resolution='10m')
-    for csv_file in file_list:
+
+    if colors is None:
+        colors = np.repeat('blue', len(file_list))
+
+    for csv_file, color in zip(file_list, colors):
         data = pd.read_csv(csv_file)
         lats = data['lat']
         lons = data['lon']
-        plt.scatter(lons[0:-1:step], lats[0:-1:step], color='blue', s=0.25)
+
+        if plot_type == 'lines':
+            plt.plot(lons[0:-1:step], lats[0:-1:step], color=color,
+                     linewidth=0.25)
+
+        if plot_type == 'scatter':
+            plt.scatter(lons[0:-1:step], lats[0:-1:step], color='blue', s=0.25)
+
         ax.set_extent(extent)
-        plt.savefig(splitext(csv_file)[0] + '.png', dpi=600)
-        plt.close()
+
+    plt.savefig(splitext(csv_file)[0] + '.png', dpi=600)
+    plt.close()

@@ -26,6 +26,7 @@ from octapy.tools import get_filepath
            ('depth', types.optional(types.float32)),
            ('extent', types.optional(types.ListType(types.float32))),
            ('data_date_range', types.optional(types.NPDatetime('m')[:])),
+           ('data_freq', types.optional(types.NPTimedelta('m'))),
            ('timestep', types.optional(types.NPTimedelta('m'))),
            ('data_timestep', types.NPTimedelta('m')),
            ('interp', types.unicode_type),
@@ -53,6 +54,8 @@ class Model:
                        match frequency of data
     timestep -- a numpy.timedelta64 object representing the timestep of the
                 tracking model in minutes (e.g., np.timedelta64(60,'m'))
+    data_freq -- a numpy.timedelta64 object representing the frequency of data
+                 on the data server (e.g., np.timedelta64(60,'m'))
     data_timestep -- a numpy.timedelta64 object representing the timestep of the
                 data to be downloaded in minutes (e.g., np.timedelta64(60,'m'))
     interp -- interpolation method. Supported are 'linear', 'nearest',
@@ -76,6 +79,7 @@ class Model:
                  data_dir='data', direction='forward', dims=2,
                  depth=None, extent=None, data_date_range=None,
                  timestep=np.timedelta64(60, 'm'),
+                 data_freq=np.timedelta64(60, 'm'),
                  data_timestep=np.timedelta64(60, 'm'), interp='linear',
                  leafsize=9, vert_migration=False, vert_array=None,
                  output_file=None, output_freq=np.timedelta64(60, 'm')):
@@ -89,6 +93,7 @@ class Model:
         self.extent = extent
         self.data_date_range = data_date_range
         self.timestep = timestep
+        self.data_freq = data_freq
         self.data_timestep = data_timestep
         self.interp = interp
         self.leafsize = leafsize
@@ -248,8 +253,14 @@ def download_data(model):
     if model.submodel == 'GOMl0.04/expt_31.0':
         year = model.data_date_range[0].item().year
         # make a list of available datetimes to download
-        dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
-                              freq=pd.Timedelta(model.data_timestep))
+        if year == 2009:
+            dates = pd.date_range('4/1/2009T19:00:00', '1/1/' + str(year + 1),
+                                  freq=pd.Timedelta(model.data_freq))
+
+        else:
+            dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
+                                  freq=pd.Timedelta(model.data_freq))
+
         depths = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0,
                            50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0,
                            150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 600.0,
@@ -350,26 +361,26 @@ def interp3d(particle, grid, model):
     else:
 
         rootgrp = Dataset(particle.filepath)
-        particle.u = interpn(grid.points, rootgrp['u'][0].T,
-                             (particle.x, particle.y),
-                             method=model.interp).item()
 
-        particle.v = interpn(grid.points, rootgrp['v'][0].T,
-                             (particle.x, particle.y),
-                             method=model.interp).item()
-
-        particle.temp = interpn(grid.points, rootgrp['temperature'][0].T,
-                                (particle.x, particle.y),
-                                method=model.interp).item()
-
-        particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
-                               (particle.x, particle.y),
-                               method=model.interp).item()
+        if model.dims == 2:
+            dims_tuple = (particle.x, particle.y)
 
         if model.dims == 3:
+            dims_tuple = (particle.x, particle.y, particle.depth)
             particle.w = interpn(grid.points, rootgrp['w_velocity'][0].T,
-                                 (particle.x, particle.y),
-                                 method=model.interp).item()
+                                 dims_tuple, method=model.interp).item()
+
+        particle.u = interpn(grid.points, rootgrp['u'][0].T,
+                             dims_tuple, method=model.interp).item()
+
+        particle.v = interpn(grid.points, rootgrp['v'][0].T,
+                             dims_tuple, method=model.interp).item()
+
+        particle.temp = interpn(grid.points, rootgrp['temperature'][0].T,
+                                dims_tuple, method=model.interp).item()
+
+        particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
+                               dims_tuple, method=model.interp).item()
 
     return particle
 
@@ -436,11 +447,6 @@ def force_particle(particle, grid, model):
 
     particle.x = particle.x + model.timestep.item().seconds * particle.u * i
     particle.y = particle.y + model.timestep.item().seconds * particle.v * i
-
-    # transformed = grid.src_crs.transform_point(particle.x, particle.y,
-    #                                            grid.tgt_crs)
-    # particle.lat = transformed[1]
-    # particle.lon = transformed[0]
 
     if model.dims == 3:
         particle.depth = (particle.depth + model.timestep.item().seconds
