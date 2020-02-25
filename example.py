@@ -28,7 +28,7 @@ model.data_date_range = np.arange(data_start, data_stop,
                                   step=model.data_timestep)
 
 model.depth = 15
-model.output_file = 'output.csv'
+model.output_file = 'output.nc'
 
 # download the data
 octapy.tracking.download_data(model)
@@ -37,17 +37,20 @@ octapy.tracking.download_data(model)
 grid = octapy.Grid(model)
 
 # run the model
-octapy.tracking.run_model(model, grid)
+octapy.tracking.run_2d_model(model, grid)
 
 # plot the output
-output_files = glob.glob('*output.csv')
+# output_files = glob.glob('*output.nc')
+output_files = ['output/88589_output.nc']
 extent = octapy.tools.get_extent(grid)
-octapy.tools.plot_csv_output(output_files, extent=extent, step=1,
-                             plot_type='lines')
+octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
+                                plot_type='lines',
+                                drifter='output/drifter_88589_output.csv')
 
 
-# example for initializing a particle
+# example for initializing a length-1 particle
 # from octapy.tracking import Particle, transform
 # particle = Particle(28., -88., 15., np.datetime64('2010-06-08', 's'))
 # particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
-#                                    particle.lon, particle.lat)
+#                                    np.array([particle.lon]),
+#                                    np.array([particle.lat]))

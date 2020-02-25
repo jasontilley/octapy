@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from os.path import splitext
+from netCDF4 import Dataset
 
 
 def get_filepath(datetime64, model_name, submodel_name, data_dir):
@@ -54,4 +55,47 @@ def plot_csv_output(file_list, extent, step=2, plot_type='lines', colors=None):
         ax.set_extent(extent)
 
     plt.savefig(splitext(csv_file)[0] + '.png', dpi=600)
+    plt.close()
+
+
+def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
+                       colors=None, drifter=None):
+    ax = plt.axes(projection=ccrs.PlateCarree())
+    ax.coastlines(resolution='10m')
+
+    if colors is None:
+        colors = np.repeat('blue', len(file_list))
+
+    for nc_file, color in zip(file_list, colors):
+        rootgrp = Dataset(nc_file)
+        lats = rootgrp['lat']
+        lons = rootgrp['lon']
+
+        if plot_type == 'lines':
+
+            for i in range(0, len(lons)):
+                plt.plot(lons[i, 0:-1:step], lats[i, 0:-1:step], color=color,
+                         linewidth=0.25)
+
+            if drifter is not None:
+                data = pd.read_csv(drifter)
+                lats = data['lat']
+                lons = data['lon']
+                plt.plot(lons, lats, color='orange', linewidth=0.25)
+
+        if plot_type == 'scatter':
+
+            for i in range(0, len(lats)):
+                plt.scatter(lons[i, 0:-1:step], lats[i, 0:-1:step],
+                            color='blue', s=0.25)
+
+            if drifter is not None:
+                data = pd.read_csv(drifter)
+                lats = data['lat']
+                lons = data['lon']
+                plt.scatter(lons, lats, color='orange', s=0.25)
+
+        ax.set_extent(extent)
+
+    plt.savefig(splitext(nc_file)[0] + '.png', dpi=600)
     plt.close()
