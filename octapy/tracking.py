@@ -14,27 +14,28 @@ from scipy.interpolate import interpn, interp1d
 from scipy.spatial.ckdtree import cKDTree
 
 from .interp_idw import interp_idw
+from .open_nc import open_nc
 from octapy.tools import get_filepath
 
 
-@jitclass([('release_file', types.unicode_type),
-           ('model', types.unicode_type),
-           ('submodel', types.unicode_type),
-           ('data_dir', types.unicode_type),
-           ('direction', types.unicode_type),
-           ('dims', types.uint8),
-           ('depth', types.optional(types.float32)),
-           ('extent', types.optional(types.ListType(types.float32))),
-           ('data_date_range', types.optional(types.NPDatetime('m')[:])),
-           ('data_freq', types.optional(types.NPTimedelta('m'))),
-           ('timestep', types.optional(types.NPTimedelta('m'))),
-           ('data_timestep', types.NPTimedelta('m')),
-           ('interp', types.unicode_type),
-           ('leafsize', types.int32),
-           ('vert_migration', types.boolean),
-           ('vert_array', types.optional(types.float32[24])),
-           ('output_file', types.optional(types.unicode_type)),
-           ('output_freq', types.NPTimedelta('m'))])
+# @jitclass([('release_file', types.unicode_type),
+#            ('model', types.unicode_type),
+#            ('submodel', types.unicode_type),
+#            ('data_dir', types.unicode_type),
+#            ('direction', types.unicode_type),
+#            ('dims', types.uint8),
+#            ('depth', types.optional(types.float32)),
+#            ('extent', types.optional(types.ListType(types.float32))),
+#            ('data_date_range', types.optional(types.NPDatetime('m')[:])),
+#            ('data_freq', types.optional(types.NPTimedelta('m'))),
+#            ('timestep', types.optional(types.NPTimedelta('m'))),
+#            ('data_timestep', types.NPTimedelta('m')),
+#            ('interp', types.unicode_type),
+#            ('leafsize', types.int32),
+#            ('vert_migration', types.boolean),
+#            ('vert_array', types.optional(types.float32[24])),
+#            ('output_file', types.optional(types.unicode_type)),
+#            ('output_freq', types.NPTimedelta('m'))])
 class Model:
     """ A particle tracking Model object
 
@@ -353,13 +354,14 @@ def get_physical(particle, grid, model):
 
 
 def interp3d(particle, grid, model):
-    if model.interp == 'idw':
+    # get the data here and feed to the interpolation functions
+    data = open_nc(particle.filepath)
 
-        particle = interp_idw(particle, grid, dims=model.dims,
+    if model.interp == 'idw':
+        particle = interp_idw(particle, grid, data, dims=model.dims,
                               leafsize=model.leafsize, power=1.0)
 
     else:
-
         rootgrp = Dataset(particle.filepath)
 
         if model.dims == 2:
@@ -381,6 +383,8 @@ def interp3d(particle, grid, model):
 
         particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
                                dims_tuple, method=model.interp).item()
+
+    data = None
 
     return particle
 
