@@ -12,7 +12,7 @@ cdef class Data:
         self.c_data = _Data(u, v, w, temp, sal)
 
     def __dealloc__(self):
-        # free(self.c_data)
+    #     # free(self.c_data)
         self.c_data.u.clear()
         self.c_data.v.clear()
         self.c_data.w.clear()

@@ -49,8 +49,14 @@ octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
 
 
 # example for initializing a length-1 particle
-# from octapy.tracking import Particle, transform
-# particle = Particle(28., -88., 15., np.datetime64('2010-06-08', 's'))
-# particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
-#                                    np.array([particle.lon]),
-#                                    np.array([particle.lat]))
+from octapy.tracking import Particle, transform
+from octapy.tools import get_filepath
+from octapy.get_data_at_index import get_data_at_index
+particle = Particle(28., -88., 15., np.datetime64('2010-06-08', 's'))
+particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
+                                   np.array([particle.lon]),
+                                   np.array([particle.lat]))
+particle.x = np.array([particle.x])
+particle.y = np.array([particle.y])
+particle.filepath = get_filepath(particle.timestamp, model.model,
+                                     model.submodel, model.data_dir)

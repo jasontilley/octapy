@@ -4,23 +4,20 @@ from .netcdf cimport *
 #from netCDF4 import Dataset
 
 
-def interp_idw(particle, grid, data, int dims=2, int leafsize=3,
-               float power=1.0):
-    points = tuple(map(tuple, np.array([particle.x, particle.y]).T))
-    distances, indices = grid.tree.query(points, k=leafsize, n_jobs=-1)
-    weights = (1. / distances ** power).astype(np.float32)
+def interp_idw(particle, data, weights, int dims=2):
 
-    particle.u = (weights * np.array(data.u)[indices]).sum(axis=1) \
+    particle.u = (weights * np.array(data.u)).sum(axis=1) \
                   / weights.sum(axis=1)
-
-    particle.v = (weights * np.array(data.v)[tuple([indices])]).sum(axis=1) \
+    particle.v = (weights * np.array(data.v)).sum(axis=1) \
                   / weights.sum(axis=1)
-
-    particle.temp = (weights * np.array(data.temp)[tuple([indices])]).sum(axis=1) \
+    particle.temp = (weights * np.array(data.temp)).sum(axis=1) \
                      / weights.sum(axis=1)
-
-    particle.sal = (weights * np.array(data.sal)[tuple([indices])]).sum(axis=1) \
+    particle.sal = (weights * np.array(data.sal)).sum(axis=1) \
                     / weights.sum(axis=1)
+
+    if dims == 3:
+        particle.w = (weights * np.array(data.w)).sum(axis=1) \
+                      / weights.sum(axis=1)
 
     return particle
     

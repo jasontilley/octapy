@@ -11,7 +11,7 @@ with open("README.md", "r") as fh:
 extensions = [Extension("octapy.*", ["octapy/interp_idw.pyx"],
                         language='c++', include_dirs=[np.get_include(),
                                                       '/opt/local/include']),
-              Extension("octapy.*", ["octapy/open_nc.pyx"],
+              Extension("octapy.*", ["octapy/get_data_at_index.pyx"],
                         language='c++', include_dirs=[np.get_include(),
                                                       '/opt/local/include']),
               Extension("octapy.*", ["octapy/data.pyx"],

@@ -14,7 +14,8 @@ from scipy.interpolate import interpn, interp1d
 from scipy.spatial.ckdtree import cKDTree
 
 from .interp_idw import interp_idw
-from .open_nc import open_nc
+from .data import Data
+from .get_data_at_index import get_data_at_index
 from octapy.tools import get_filepath
 
 
@@ -353,13 +354,28 @@ def get_physical(particle, grid, model):
     return particle
 
 
-def interp3d(particle, grid, model):
+def interp3d(particle, grid, model, power=1.0):
     # get the data here and feed to the interpolation functions
-    data = open_nc(particle.filepath)
+    leafsize = 3
+    points = tuple(map(tuple, np.array([particle.x, particle.y]).T))
+    distances, indices = grid.tree.query(points, k=leafsize, n_jobs=-1)
+
+    indices = indices[0]
+    data_shape = (1, 1, 385, 541)
+    #start = np.intc(np.unravel_index(indic, data_shape))
+
+    data = np.empty((len(indices), 5))
+    for i in range(len(indices)):
+        data[i] = np.array(get_data_at_index(particle.filepath,
+                                             np.intc(np.unravel_index(indices[i],
+                                                                      data_shape)),
+                                             2)).T[0]
+
+    data = Data(data[:, 0], data[:, 1], data[:, 2], data[:, 3], data[:, 4])
+    weights = (1. / distances ** power).astype(np.float32)
 
     if model.interp == 'idw':
-        particle = interp_idw(particle, grid, data, dims=model.dims,
-                              leafsize=model.leafsize, power=1.0)
+        particle = interp_idw(particle, data, weights, dims=model.dims)
 
     else:
         rootgrp = Dataset(particle.filepath)
@@ -383,8 +399,6 @@ def interp3d(particle, grid, model):
 
         particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
                                dims_tuple, method=model.interp).item()
-
-    data = None
 
     return particle
 
@@ -603,3 +617,4 @@ def run_2d_model(model, grid):
         nc_data.to_netcdf('output/'
                           + release['particle_id'][i].astype(str) + '_'
                           + model.output_file)
+        nc_data.close()
