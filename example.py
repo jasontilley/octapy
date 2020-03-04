@@ -49,14 +49,43 @@ octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
 
 
 # example for initializing a length-1 particle
-from octapy.tracking import Particle, transform
-from octapy.tools import get_filepath
-from octapy.get_data_at_index import get_data_at_index
-particle = Particle(28., -88., 15., np.datetime64('2010-06-08', 's'))
-particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
-                                   np.array([particle.lon]),
-                                   np.array([particle.lat]))
-particle.x = np.array([particle.x])
-particle.y = np.array([particle.y])
-particle.filepath = get_filepath(particle.timestamp, model.model,
-                                     model.submodel, model.data_dir)
+# from octapy.tracking import Particle, transform
+# from octapy.tools import get_filepath
+# from octapy.get_data_at_index import get_data_at_index
+# particle = Particle(28., -88., 15., np.datetime64('2010-06-08', 's'))
+# particle.x, particle.y = transform(grid.src_crs, grid.tgt_crs,
+#                                    np.array([particle.lon]),
+#                                    np.array([particle.lat]))
+# particle.x = np.array([particle.x])
+# particle.y = np.array([particle.y])
+# particle.filepath = get_filepath(particle.timestamp, model.model,
+#                                      model.submodel, model.data_dir)
+
+# skill example for drifter 75196
+release_file = 'release.csv'
+model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
+                              interp='idw', leafsize=3)
+data_start = np.datetime64('2009-05-01')
+data_stop = np.datetime64('2009-05-31')
+model.data_freq = np.timedelta64(60, 'm')
+model.data_timestep = np.timedelta64(1440, 'm')
+model.timestep = np.timedelta64(60, 'm')
+model.data_date_range = np.arange(data_start, data_stop,
+                                  step=model.data_timestep)
+model.depth = 15
+model.output_file = 'output.nc'
+grid = octapy.Grid(model)
+
+drifter_file = 'gom_drifters.csv'
+octapy.tools.build_skill_release(drifter_file, model)
+model.release_file = 'release_drifter_75196.csv'
+octapy.tracking.run_2d_model(model, grid)
+
+# plot the skill output tracks
+output_files = glob.glob('output/75196_*.nc')
+# remove the full track from the plot
+output_files.remove('output/75196_output.nc')
+extent = octapy.tools.get_extent(grid)
+octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
+                                plot_type='lines',
+                                drifter='output/drifter_75196_output.csv')

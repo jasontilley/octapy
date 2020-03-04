@@ -360,16 +360,14 @@ def interp3d(particle, grid, model, power=1.0):
     points = tuple(map(tuple, np.array([particle.x, particle.y]).T))
     distances, indices = grid.tree.query(points, k=leafsize, n_jobs=-1)
 
+    # this could be a bandaid and may fail when I add diffusion?
     indices = indices[0]
     data_shape = (1, 1, 385, 541)
-    #start = np.intc(np.unravel_index(indic, data_shape))
 
     data = np.empty((len(indices), 5))
     for i in range(len(indices)):
-        data[i] = np.array(get_data_at_index(particle.filepath,
-                                             np.intc(np.unravel_index(indices[i],
-                                                                      data_shape)),
-                                             2)).T[0]
+        start = np.intc(np.unravel_index(indices[i], data_shape))
+        data[i] = np.array(get_data_at_index(particle.filepath, start, 2)).T[0]
 
     data = Data(data[:, 0], data[:, 1], data[:, 2], data[:, 3], data[:, 4])
     weights = (1. / distances ** power).astype(np.float32)
@@ -585,9 +583,10 @@ def run_2d_model(model, grid):
         particle.filepath = get_filepath(date_range[0], model.model,
                                          model.submodel, model.data_dir)
         particle = get_physical(particle, grid, model)
+        particle.timestamp = date_range[0]
         for j in range(len(date_range)):
-            particle.timestamp = date_range[j]
-            particle.filepath = get_filepath(date_range[j], model.model,
+            #particle.timestamp = date_range[j]
+            particle.filepath = get_filepath(particle.timestamp, model.model,
                                              model.submodel, model.data_dir)
             # if j.tolist().hour == 0:
             #     print('getting physical data for ' + str(j))
