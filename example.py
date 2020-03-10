@@ -77,6 +77,7 @@ model.output_file = 'output.nc'
 grid = octapy.Grid(model)
 
 drifter_file = 'gom_drifters.csv'
+drifter_id = 75196
 octapy.tools.build_skill_release(drifter_file, model)
 model.release_file = 'release_drifter_75196.csv'
 octapy.tracking.run_2d_model(model, grid)
@@ -89,3 +90,18 @@ extent = octapy.tools.get_extent(grid)
 octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
                                 plot_type='lines',
                                 drifter='output/drifter_75196_output.csv')
+
+
+
+# pretty plot
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+from owslib.wmts import WebMapTileService
+
+URL = 'http://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi'
+wmts = WebMapTileService(URL)
+layer = 'BlueMarble_NextGeneration'
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.set_extent(extent)
+ax.add_wmts(wmts, layer, wmts_kwargs={'time': '2016-02-05'})
+ax.coastlines(resolution='10m')

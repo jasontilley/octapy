@@ -8,6 +8,7 @@ import cartopy.crs as ccrs
 import octapy
 from os.path import splitext
 from netCDF4 import Dataset
+from owslib.wmts import WebMapTileService
 
 
 def get_filepath(datetime64, model_name, submodel_name, data_dir):
@@ -61,11 +62,15 @@ def plot_csv_output(file_list, extent, step=2, plot_type='lines', colors=None):
 
 def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
                        colors=None, drifter=None):
+    URL = 'http://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi'
+    wmts = WebMapTileService(URL)
+    layer = 'BlueMarble_NextGeneration'
     ax = plt.axes(projection=ccrs.PlateCarree())
-    ax.coastlines(resolution='10m')
+    ax.add_wmts(wmts, layer, wmts_kwargs={'time': '2016-02-05'})
+    ax.coastlines(resolution='10m', linewidth=0.1, color='white')
 
     if colors is None:
-        colors = np.repeat('blue', len(file_list))
+        colors = np.repeat('white', len(file_list))
 
     for nc_file, color in zip(file_list, colors):
         rootgrp = Dataset(nc_file)
@@ -88,7 +93,7 @@ def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
 
             for i in range(0, len(lats)):
                 plt.scatter(lons[i, 0:-1:step], lats[i, 0:-1:step],
-                            color='blue', s=0.25)
+                            color='white', s=0.25)
 
             if drifter is not None:
                 data = pd.read_csv(drifter)
@@ -132,7 +137,7 @@ def build_skill_release(drifter_file, model, period=pd.Timedelta('3 Days'),
     drifter_data['datetime'] = datetime
 
     # make sure you don't run the model outside the data range
-    end_slice = int(period / data_freq)
+    end_slice = int(period / data_freq) + 1
 
     # set the stride for looping through date range
     stride = int(pd.Timedelta('1 Days') / data_freq)
@@ -164,6 +169,80 @@ def build_skill_release(drifter_file, model, period=pd.Timedelta('3 Days'),
         new_release['start_time'] = date_range.values.astype('datetime64[s]').astype(str)
         new_release.to_csv('release_drifter_' + str(drifter_id) + '.csv',
                            float_format='%.4f', index=False)
+
+
+def get_drifter_data(drifter_file, drifter_id):
+    """Gets drifter data from a given .csv file for a particular drifter id
+
+    - **parameters**
+
+    :param drifter_file: a .csv file of the drifter data with the columns
+    'datetime', 'lat', and 'lon'
+    :param drifter_id: the drifter id with the same type as in the drifter file
+    :return: a Pandas
+    """
+    drifter_data = pd.read_csv(drifter_file)
+    # convert the dates to datetimes
+    datetime = pd.to_datetime({'year': drifter_data['year'],
+                               'month': drifter_data['month'],
+                               'day': drifter_data['day'],
+                               'hour': drifter_data['hour']})
+    drifter_data['datetime'] = datetime
+    drifter_data = drifter_data[drifter_data['id'] == drifter_id]
+    return drifter_data
+
+def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
+                       period=pd.Timedelta('3 Days'),
+                       data_freq=pd.Timedelta('60 minutes')):
+    """Calculate the skill score for a given particle run. Here, the skill score
+    is calculated as in Liu and Weisberg (2011).
+
+    Keyword arguments:
+    drifter_file -- a .csv file of the drifter data with the columns 'datetime',
+                    'lat', and 'lon'
+    skill_files -- list of the model output netCDF files that contain the tracks
+                   from the model runs for skill
+    date_range -- a numpy.ndarray object of numpy.datetime64 objects
+    period -- a pandas Timedelta object representing the time period for which
+              to calculate the skill
+    data_freq -- a pandas Timedelta object representing the frequency of the
+                 drifter data
+    """
+
+    drifter_data = get_drifter_data(drifter_file, drifter_id)
+    drifter_data = drifter_data[drifter_data['datetime'].isin(date_range)]
+    drifter_coords = grid.tgt_crs.transform_points(grid.src_crs,
+                                                   drifter_data['lon'].values,
+                                                   drifter_data['lat'].values)
+    drifter_x, drifter_y = drifter_coords.T[0][1:], drifter_coords.T[1][1:]
+
+    for file in skill_files:
+        rootgrp = Dataset(file)
+        units, epoch = rootgrp['time'].units.split(' since ')
+        times = rootgrp['time'][:]
+        times = pd.Timestamp(epoch) + pd.TimedeltaIndex(times, unit=units)
+        indices = times.isin(drifter_data['datetime'])
+        times = times[indices]
+        lats = rootgrp['lat'][:, indices]
+        lons = rootgrp['lon'][:, indices]
+        coords = grid.tgt_crs.transform_points(grid.src_crs, lons, lats)
+        # find the indices that fall in the date range
+        skill_data = np.empty((len(coords), 4))
+        for particle in coords:
+            # find the total length of the trajectory
+            start_x, start_y = particle.T[0][:-1], particle.T[1][:-1]
+            end_x, end_y = particle.T[0][1:], particle.T[1][1:]
+            xy = np.array([start_x, start_y]) - np.array([end_x, end_y])
+            traj_len = np.linalg.norm(xy, axis=1).sum()
+            # find the separation distance
+            sep = np.array([drifter_x, drifter_y]) - np.array([end_x, end_y])
+            sep_distance = np.linalg.norm(sep, axis=1).sum()
+            c = sep_distance / traj_len
+            # save the trajectory distance to array
+            skill_data[particle] = np.array(particle, traj_len, sep_distance, c)
+
+        return skill_data
+
 
 
 
