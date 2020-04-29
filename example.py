@@ -1,3 +1,4 @@
+from os.path import expanduser
 import glob
 import numpy as np
 import octapy
@@ -7,13 +8,15 @@ import octapy
 # os.mkdir('output')
 
 # initialize the model
+data_dir = expanduser('~') + '/Desktop/data'
 release_file = 'release.csv'
 model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
-                              interp='idw', leafsize=3)
+                              data_dir=data_dir, interp='idw', leafsize=3)
 
 # the data has one file for each hour (use minutes as unit)
-data_start = np.datetime64('2009-05-01')
-data_stop = np.datetime64('2009-05-31')
+# BUG - must run separately for each year date range
+data_start = np.datetime64('2010-06-09')
+data_stop = np.datetime64('2010-07-07')
 model.data_freq = np.timedelta64(60, 'm')
 model.data_timestep = np.timedelta64(1440, 'm')
 

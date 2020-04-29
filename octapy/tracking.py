@@ -582,14 +582,14 @@ def run_2d_model(model, grid):
         particle.x, particle.y = transformed[:2].astype(np.float32)
         particle.filepath = get_filepath(date_range[0], model.model,
                                          model.submodel, model.data_dir)
-        particle = get_physical(particle, grid, model)
         particle.timestamp = date_range[0]
+        particle = get_physical(particle, grid, model)
         for j in range(len(date_range)):
             #particle.timestamp = date_range[j]
             particle.filepath = get_filepath(particle.timestamp, model.model,
                                              model.submodel, model.data_dir)
             # if j.tolist().hour == 0:
-            #     print('getting physical data for ' + str(j))
+            #    print('getting physical data for ' + str(j))
             particle_arr = np.array([particle.x, particle.y, particle.depth,
                                      particle.u, particle.v, particle.temp,
                                      particle.sal]).T
