@@ -64,12 +64,12 @@ octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
 # particle.filepath = get_filepath(particle.timestamp, model.model,
 #                                      model.submodel, model.data_dir)
 
-# skill example for drifter 75196
+# skill example for drifter 88589
 release_file = 'release.csv'
 model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
-                              interp='idw', leafsize=3)
-data_start = np.datetime64('2009-05-01')
-data_stop = np.datetime64('2009-05-31')
+                              data_dir=data_dir, interp='idw', leafsize=3)
+data_start = np.datetime64('2010-06-09')
+data_stop = np.datetime64('2010-07-07')
 model.data_freq = np.timedelta64(60, 'm')
 model.data_timestep = np.timedelta64(1440, 'm')
 model.timestep = np.timedelta64(60, 'm')
@@ -80,31 +80,16 @@ model.output_file = 'output.nc'
 grid = octapy.Grid(model)
 
 drifter_file = 'gom_drifters.csv'
-drifter_id = 75196
+drifter_id = 88589
 octapy.tools.build_skill_release(drifter_file, model)
-model.release_file = 'release_drifter_75196.csv'
+model.release_file = 'release_drifter_' + str(drifter_id) + '.csv'
 octapy.tracking.run_2d_model(model, grid)
 
 # plot the skill output tracks
-output_files = glob.glob('output/75196_*.nc')
+output_files = glob.glob('output/' + str(drifter_id) + '_*.nc')
 # remove the full track from the plot
-output_files.remove('output/75196_output.nc')
+output_files.remove('output/' + str(drifter_id) + '_output.nc')
 extent = octapy.tools.get_extent(grid)
 octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
                                 plot_type='lines',
-                                drifter='output/drifter_75196_output.csv')
-
-
-
-# pretty plot
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-from owslib.wmts import WebMapTileService
-
-URL = 'http://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi'
-wmts = WebMapTileService(URL)
-layer = 'BlueMarble_NextGeneration'
-ax = plt.axes(projection=ccrs.PlateCarree())
-ax.set_extent(extent)
-ax.add_wmts(wmts, layer, wmts_kwargs={'time': '2016-02-05'})
-ax.coastlines(resolution='10m')
+                                drifter='output/drifter_' + str(drifter_id) + '_output.csv')
