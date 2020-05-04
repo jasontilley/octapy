@@ -8,6 +8,7 @@ import cartopy.crs as ccrs
 import octapy
 from os.path import splitext
 from netCDF4 import Dataset
+from pyproj import Geod
 from owslib.wmts import WebMapTileService
 
 
@@ -202,50 +203,46 @@ def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
                     'lat', and 'lon'
     skill_files -- list of the model output netCDF files that contain the tracks
                    from the model runs for skill
-    date_range -- a numpy.ndarray object of numpy.datetime64 objects
+    date_range -- a numpy.ndarray object of numpy.datetime64 objects, the
+                  drifter and output data frequencies should match
     period -- a pandas Timedelta object representing the time period for which
               to calculate the skill
     data_freq -- a pandas Timedelta object representing the frequency of the
                  drifter data
     """
 
+    geod = Geod(ellps="WGS84")
     drifter_data = get_drifter_data(drifter_file, drifter_id)
     drifter_data = drifter_data[drifter_data['datetime'].isin(date_range)]
-    drifter_coords = grid.tgt_crs.transform_points(grid.src_crs,
-                                                   drifter_data['lon'].values,
-                                                   drifter_data['lat'].values)
-    drifter_x, drifter_y = drifter_coords.T[0][1:], drifter_coords.T[1][1:]
 
+    # for each skill output file
     for file in skill_files:
+        # open model data and convert times to datetimes
         rootgrp = Dataset(file)
         units, epoch = rootgrp['time'].units.split(' since ')
         times = rootgrp['time'][:]
         times = pd.Timestamp(epoch) + pd.TimedeltaIndex(times, unit=units)
-        indices = times.isin(drifter_data['datetime'])
-        times = times[indices]
-        lats = rootgrp['lat'][:, indices]
-        lons = rootgrp['lon'][:, indices]
-        coords = grid.tgt_crs.transform_points(grid.src_crs, lons, lats)
-        # find the indices that fall in the date range
-        skill_data = np.empty((len(coords), 4))
-        for particle in coords:
-            # find the total length of the trajectory
-            start_x, start_y = particle.T[0][:-1], particle.T[1][:-1]
-            end_x, end_y = particle.T[0][1:], particle.T[1][1:]
-            xy = np.array([start_x, start_y]) - np.array([end_x, end_y])
-            traj_len = np.linalg.norm(xy, axis=1).sum()
+        # get the drifter coordinates at corresponding times as model output
+        drift_indices = drifter_data['datetime'].isin(times)
+        drifter_lats = drifter_data['lat'].values[drift_indices]
+        drifter_lons = drifter_data['lon'].values[drift_indices]
+        # get the model coordinates
+        model_indices = times.isin(drifter_data['datetime'])
+        model_lats = rootgrp['lat'][:, model_indices]
+        model_lons = rootgrp['lon'][:, model_indices]
+
+        skill_data = np.empty((len(model_lats), 4))
+        # for each particle
+        for i in range(0, len(model_lats)):
+            # find the total length of the trajectory by adding each path length
+            traj_len = geod.line_length(model_lons[i], model_lats[i])
             # find the separation distance
-            sep = np.array([drifter_x, drifter_y]) - np.array([end_x, end_y])
-            sep_distance = np.linalg.norm(sep, axis=1).sum()
+            lons = np.array([drifter_lons[-1], model_lons[i, -1]])
+            lats = np.array([drifter_lats[-1], model_lats[i, -1]])
+            sep_distance = geod.line_length(lons, lats)
             c = sep_distance / traj_len
             # save the trajectory distance to array
-            skill_data[particle] = np.array(particle, traj_len, sep_distance, c)
+            skill_data[i] = np.array([i, traj_len, sep_distance, c])
 
         return skill_data
-
-
-
-
-
-
 

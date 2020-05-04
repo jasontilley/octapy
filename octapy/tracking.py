@@ -562,11 +562,14 @@ def run_2d_model(model, grid):
     for i in range(0, len(np.atleast_1d(release))):
         print('getting particle info for particle '
               + np.atleast_1d(release['particle_id'])[i].astype(str))
+        # add model.timestep to represent the true period
+        #  model.timestep.astype(int)
         date_range = np.arange(np.atleast_1d(release['start_time'])[i],
                                np.atleast_1d(release['start_time'])[i]
                                + np.timedelta64(
                                    int(np.atleast_1d(release['days'])[i]
-                                       * 24 * 60), 'm'),
+                                       * 24 * 60 + model.timestep.astype(int)),
+                                   'm'),
                                model.timestep)
         # make array of dimensions (particle, time, data)
         num = release['num'][i]

@@ -16,7 +16,8 @@ model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
 # the data has one file for each hour (use minutes as unit)
 # BUG - must run separately for each year date range
 data_start = np.datetime64('2010-06-09')
-data_stop = np.datetime64('2010-07-07')
+# make sure to add an additional day of data for proper time interpolation
+data_stop = np.datetime64('2010-07-08')
 model.data_freq = np.timedelta64(60, 'm')
 model.data_timestep = np.timedelta64(1440, 'm')
 
@@ -65,11 +66,12 @@ octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
 #                                      model.submodel, model.data_dir)
 
 # skill example for drifter 88589
+data_dir = expanduser('~') + '/Desktop/data'
 release_file = 'release.csv'
 model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
                               data_dir=data_dir, interp='idw', leafsize=3)
 data_start = np.datetime64('2010-06-09')
-data_stop = np.datetime64('2010-07-07')
+data_stop = np.datetime64('2010-07-08')
 model.data_freq = np.timedelta64(60, 'm')
 model.data_timestep = np.timedelta64(1440, 'm')
 model.timestep = np.timedelta64(60, 'm')
@@ -93,3 +95,13 @@ extent = octapy.tools.get_extent(grid)
 octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
                                 plot_type='lines',
                                 drifter='output/drifter_' + str(drifter_id) + '_output.csv')
+
+# run the skill analysis
+from octapy.tools import *
+skill_files = sorted(output_files)
+date_range = model.data_date_range
+
+# return particle id, trajectory_length, separation distance, and c
+skill = run_skill_analysis(drifter_file, drifter_id, skill_files, date_range,
+                           grid, period=pd.Timedelta('3 Days'),
+                           data_freq=pd.Timedelta('60 minutes'))
