@@ -192,6 +192,7 @@ def get_drifter_data(drifter_file, drifter_id):
     drifter_data = drifter_data[drifter_data['id'] == drifter_id]
     return drifter_data
 
+
 def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
                        period=pd.Timedelta('3 Days'),
                        data_freq=pd.Timedelta('60 minutes')):
@@ -201,8 +202,8 @@ def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
     Keyword arguments:
     drifter_file -- a .csv file of the drifter data with the columns 'datetime',
                     'lat', and 'lon'
-    skill_files -- list of the model output netCDF files that contain the tracks
-                   from the model runs for skill
+    skill_files -- a sorted list of the model output netCDF files that contain
+                   the tracks from the model runs for skill
     date_range -- a numpy.ndarray object of numpy.datetime64 objects, the
                   drifter and output data frequencies should match
     period -- a pandas Timedelta object representing the time period for which
@@ -215,10 +216,15 @@ def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
     drifter_data = get_drifter_data(drifter_file, drifter_id)
     drifter_data = drifter_data[drifter_data['datetime'].isin(date_range)]
 
+    # query one of the files to find the number of particles
+    rootgrp = Dataset(skill_files[0])
+    num_particles = rootgrp['release'].size
+    skill_data = np.empty((len(skill_files), num_particles, 4), dtype='O')
+
     # for each skill output file
-    for file in skill_files:
+    for i in range(0, len(skill_files)):
         # open model data and convert times to datetimes
-        rootgrp = Dataset(file)
+        rootgrp = Dataset(skill_files[i])
         units, epoch = rootgrp['time'].units.split(' since ')
         times = rootgrp['time'][:]
         times = pd.Timestamp(epoch) + pd.TimedeltaIndex(times, unit=units)
@@ -231,18 +237,16 @@ def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
         model_lats = rootgrp['lat'][:, model_indices]
         model_lons = rootgrp['lon'][:, model_indices]
 
-        skill_data = np.empty((len(model_lats), 4))
         # for each particle
-        for i in range(0, len(model_lats)):
+        for j in range(0, num_particles):
             # find the total length of the trajectory by adding each path length
-            traj_len = geod.line_length(model_lons[i], model_lats[i])
+            traj_len = geod.line_length(model_lons[j], model_lats[j])
             # find the separation distance
-            lons = np.array([drifter_lons[-1], model_lons[i, -1]])
-            lats = np.array([drifter_lats[-1], model_lats[i, -1]])
+            lons = np.array([drifter_lons[-1], model_lons[j, -1]])
+            lats = np.array([drifter_lats[-1], model_lats[j, -1]])
             sep_distance = geod.line_length(lons, lats)
             c = sep_distance / traj_len
             # save the trajectory distance to array
-            skill_data[i] = np.array([i, traj_len, sep_distance, c])
+            skill_data[i, j] = np.array([times[i], traj_len, sep_distance, c])
 
-        return skill_data
-
+    return skill_data
