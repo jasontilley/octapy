@@ -98,6 +98,7 @@ octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
                                         + '_output.csv')
 
 # run the skill analysis
+# next try 10 day
 from octapy.tools import *
 skill_files = sorted(output_files)
 date_range = model.data_date_range
@@ -106,3 +107,38 @@ date_range = model.data_date_range
 skill = run_skill_analysis(drifter_file, drifter_id, skill_files, date_range,
                            grid, period=pd.Timedelta('3 Days'),
                            data_freq=pd.Timedelta('60 minutes'))
+
+
+# run backward
+data_dir = expanduser('~') + '/Desktop/data'
+release_file = 'release_back.csv'
+model = octapy.tracking.Model(release_file, 'HYCOM', 'GOMl0.04/expt_31.0',
+                              direction=-1, data_dir=data_dir,
+                              interp='idw', leafsize=3)
+# make sure to add an additional day of data for proper time interpolation
+data_start = np.datetime64('2010-07-06')
+data_stop = np.datetime64('2010-06-08')
+model.data_timestep = np.timedelta64(1440, 'm')
+model.timestep = np.timedelta64(60, 'm')
+# must have date range with negative timestep
+model.data_date_range = np.arange(data_start, data_stop,
+                                  step=-model.data_timestep)
+
+model.depth = 15
+model.output_file = 'back_output.nc'
+
+# download the data
+octapy.tracking.download_data(model)
+
+# initialize the grid
+grid = octapy.Grid(model)
+
+# run the model
+octapy.tracking.run_2d_model(model, grid)
+
+output_files = ['output/88589_back_output.nc']
+drifter_id = 88589
+extent = octapy.tools.get_extent(grid)
+octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
+                                plot_type='lines', drifter='output/drifter_'
+                                + str(drifter_id) + '_back_output.csv')

@@ -46,7 +46,8 @@ class Model:
     submodel -- name string of the submodel and/or experiment used for input
                 data (e.g, 'GOMl0.04/expt_31.0')
     data_dir -- data directory path
-    direction -- forcing direction through time. Must be 'forward' or 'backward'
+    direction -- forcing direction through time. Must be  1 for forward or -1
+                 for backward
     dims -- dimensionality of the model, must be 2 or 3
     data_vars -- an numpy.ndarray of the variable names in the data file
     depth -- forcing depth if the model is 2-dimensional
@@ -78,7 +79,7 @@ class Model:
     """
 
     def __init__(self, release_file=None, model=None, submodel=None,
-                 data_dir='data', direction='forward', dims=2,
+                 data_dir='data', direction=1, dims=2,
                  depth=None, extent=None, data_date_range=None,
                  timestep=np.timedelta64(60, 'm'),
                  data_freq=np.timedelta64(60, 'm'),
@@ -275,7 +276,7 @@ def download_data(model):
     # append one additional data time step
     model.data_date_range = np.append(model.data_date_range,
                                       model.data_date_range[-1]
-                                      + model.data_timestep)
+                                      + model.data_timestep * model.direction)
 
     for date in model.data_date_range:
 
@@ -471,20 +472,17 @@ def interp_for_time(particle, particle1, particle2, dims=2):
 
 
 def force_particle(particle, grid, model):
-    if model.direction == 'forward':
-        i = 1
 
-    if model.direction == 'backward':
-        i = -1
-
-    particle.x = particle.x + model.timestep.item().seconds * particle.u * i
-    particle.y = particle.y + model.timestep.item().seconds * particle.v * i
+    particle.x = (particle.x + model.timestep.item().seconds * particle.u
+                  * model.direction)
+    particle.y = (particle.y + model.timestep.item().seconds * particle.v
+                  * model.direction)
 
     if model.dims == 3:
         particle.depth = (particle.depth + model.timestep.item().seconds
-                          * particle.w * i)
+                          * particle.w * model.direction)
 
-    particle.timestamp = particle.timestamp + model.timestep * i
+    particle.timestamp = particle.timestamp + model.timestep * model.direction
     particle.filepath = get_filepath(particle.timestamp, model.model,
                                      model.submodel, model.data_dir)
     # update the particle's physical data
@@ -550,6 +548,7 @@ def add_row_to_arr(arr, particle):
 
 
 def run_2d_model(model, grid):
+
     release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
                             dtype=[('particle_id', 'S8'),
                                    ('num', 'i'),
@@ -569,14 +568,14 @@ def run_2d_model(model, grid):
                                + np.timedelta64(
                                    int(np.atleast_1d(release['days'])[i]
                                        * 24 * 60 + model.timestep.astype(int)),
-                                   'm'),
-                               model.timestep)
+                                   'm') * model.direction,
+                               model.timestep * model.direction)
         # make array of dimensions (particle, time, data)
-        num = release['num'][i]
+        num = np.atleast_1d(release['num'])[i]
         trajectory = np.empty((num, len(date_range), 7))
-        lat = np.repeat(release['start_lat'][i], num)
-        lon = np.repeat(release['start_lon'][i], num)
-        depth = np.repeat(release['start_depth'][i], num)
+        lat = np.repeat(np.atleast_1d(release['start_lat'])[i], num)
+        lon = np.repeat(np.atleast_1d(release['start_lon'])[i], num)
+        depth = np.repeat(np.atleast_1d(release['start_depth'])[i], num)
 
         particle = Particle(lat, lon, depth)
         transformed = grid.tgt_crs.transform_points(grid.src_crs,
@@ -617,6 +616,6 @@ def run_2d_model(model, grid):
                                      'time': date_range})
 
         nc_data.to_netcdf('output/'
-                          + release['particle_id'][i].astype(str) + '_'
-                          + model.output_file)
+                          + np.atleast_1d(release['particle_id'])[i].astype(str)
+                          + '_' + model.output_file)
         nc_data.close()
