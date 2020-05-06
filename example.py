@@ -94,7 +94,8 @@ output_files.remove('output/' + str(drifter_id) + '_output.nc')
 extent = octapy.tools.get_extent(grid)
 octapy.tools.plot_netcdf_output(output_files, extent=extent, step=1,
                                 plot_type='lines',
-                                drifter='output/drifter_' + str(drifter_id) + '_output.csv')
+                                drifter='output/drifter_' + str(drifter_id)
+                                        + '_output.csv')
 
 # run the skill analysis
 from octapy.tools import *

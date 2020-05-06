@@ -246,7 +246,8 @@ def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
             lats = np.array([drifter_lats[-1], model_lats[j, -1]])
             sep_distance = geod.line_length(lons, lats)
             c = sep_distance / traj_len
-            # save the trajectory distance to array
-            skill_data[i, j] = np.array([times[i], traj_len, sep_distance, c])
+            s = np.maximum(0, 1 - c)
+            # save the skill information to array
+            skill_data[i, j] = np.array([times[0], traj_len, sep_distance, s])
 
     return skill_data
