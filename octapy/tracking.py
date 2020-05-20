@@ -273,6 +273,20 @@ def download_data(model):
         model_dir = ('http://tds.hycom.org/thredds/dodsC/' + model.submodel
                      + '/' + str(year) + '/hrly')
 
+    if model.submodel == 'GOMu0.04/expt_50.1':
+        year = model.data_date_range[0].item().year
+        # make a list of available datetimes to download
+        dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
+                              freq=pd.Timedelta(model.data_freq))
+        depths = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0,
+                           50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0,
+                           150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 600.0,
+                           700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0,
+                           1300.0, 1400.0, 1500.0, 1750.0, 2000.0, 2500.0,
+                           3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
+        model_dir = ('http://tds.hycom.org/thredds/dodsC/'+ model.submodel
+                     + '/data/netcdf/2008' + '/data/netcdf/' + str(year))
+
     # append one additional data time step
     model.data_date_range = np.append(model.data_date_range,
                                       model.data_date_range[-1]
