@@ -5,6 +5,7 @@ import glob
 from os import path
 
 import numpy as np
+import urllib.request
 import pandas as pd
 import xarray as xr
 import cartopy.crs as ccrs
@@ -252,86 +253,40 @@ def transform(src_crs, tgt_crs, lon, lat):
     return x, y
 
 
-def download_data(model):
-    if model.submodel == 'GOMl0.04/expt_31.0':
-        year = model.data_date_range[0].item().year
-        # make a list of available datetimes to download
-        if year == 2009:
-            dates = pd.date_range('4/1/2009T19:00:00', '1/1/' + str(year + 1),
-                                  freq=pd.Timedelta(model.data_freq))
+def download_hycom_data(model):
+
+    if model.submodel == 'GOMl0.04/expt_20.1':
+        base_prefix = 'http://ncss.hycom.org/thredds/ncss/grid/{0}/{1}'
+    else:
+        base_prefix = 'http://ncss.hycom.org/thredds/ncss/{0}/{1}/hrly'
+
+    base_query = ('?var=salinity&var=temperature&var=u&var=v&var=w_velocity'
+                  + '&time_start={0}&time_end={0}&accept=netcdf')
+
+    if model.depth is not -1:
+        depth_query = "&vertCoord=" + str(model.depth)
+        base_query = base_query + depth_query
+
+    if not path.exists(model.data_dir):
+        os.makedirs(model.data_dir)
+
+    start_time = np.datetime64(model.data_date_range[0])
+    end_time = np.datetime64(model.data_date_range[-1])
+    date_range = np.arange(start_time, end_time, model.data_timestep)
+
+    for date_time in date_range:
+        curr_path = get_filepath(date_time, model.model, model.submodel,
+                                 model.data_dir)
+
+        if not path.exists(curr_path):
+            prefix = base_prefix.format(model.submodel,
+                                        str(date_time.astype(object).year))
+            query = base_query.format(str(date_time))
+            url = prefix + query
+            urllib.request.urlretrieve(url, curr_path)
 
         else:
-            dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
-                                  freq=pd.Timedelta(model.data_freq))
-
-        depths = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0,
-                           50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0,
-                           150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 600.0,
-                           700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0,
-                           1300.0, 1400.0, 1500.0, 1750.0, 2000.0, 2500.0,
-                           3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
-        model_dir = ('http://tds.hycom.org/thredds/dodsC/' + model.submodel
-                     + '/' + str(year) + '/hrly')
-
-    if model.submodel == 'GOMu0.04/expt_50.1':
-        year = model.data_date_range[0].item().year
-        # make a list of available datetimes to download
-        dates = pd.date_range('1/1/' + str(year), '1/1/' + str(year + 1),
-                              freq=pd.Timedelta(model.data_freq))
-        depths = np.array([0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0,
-                           50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 125.0,
-                           150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 600.0,
-                           700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0,
-                           1300.0, 1400.0, 1500.0, 1750.0, 2000.0, 2500.0,
-                           3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0])
-        model_dir = ('http://tds.hycom.org/thredds/dodsC/'+ model.submodel
-                     + '/data/netcdf/2008' + '/data/netcdf/' + str(year))
-
-    # append one additional data time step
-    model.data_date_range = np.append(model.data_date_range,
-                                      model.data_date_range[-1]
-                                      + model.data_timestep * model.direction)
-
-    for date in model.data_date_range:
-
-        try:
-            time_idx = np.where(dates == date)[0][0]
-
-        except IndexError:
-            continue
-
-        if model.depth is not None:
-            depth_idx = np.where(depths == model.depth)[0][0]
-
-        ncfile = get_filepath(date.astype('datetime64[s]'), model.model,
-                              model.submodel, model.data_dir)
-
-        if path.isfile(ncfile):
             print('File already exists!')
-            continue
-
-        if model.dims == 3:
-            dim_str = '[' + str(time_idx) + '][0:1:39][0:1:384][0:1:540]'
-            query_str = ('?Depth[0:1:39],Latitude[0:1:384],'
-                         + 'Longitude[0:1:540],MT[' + str(time_idx) + '],'
-                         + 'u' + dim_str + ',' + 'v' + dim_str + ','
-                         + 'w_velocity' + dim_str + ','
-                         + 'temperature' + dim_str + ',' + 'salinity'
-                         + dim_str)
-
-        if model.dims == 2:
-            dim_str = ('[' + str(time_idx) + '][' + str(depth_idx) +
-                       '][0:1:384][0:1:540]')
-            query_str = ('?Depth[' + str(depth_idx)
-                         + '],Latitude[0:1:384],' + 'Longitude[0:1:540],MT['
-                         + str(time_idx) + '],' + 'u' + dim_str + ',' + 'v'
-                         + dim_str + ',' + 'w_velocity' + dim_str + ','
-                         + 'temperature' + dim_str + ',' + 'salinity'
-                         + dim_str)
-
-        print('Writing: ' + ncfile)
-        data = xr.open_dataset(model_dir + query_str)
-        data.to_netcdf(ncfile)
 
 
 def get_physical(particle, grid, model):

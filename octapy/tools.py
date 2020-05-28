@@ -84,6 +84,10 @@ def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
                 plt.plot(lons[i, 0:-1:step], lats[i, 0:-1:step], color=color,
                          linewidth=0.25)
 
+            for i in range(0, len(lons)):
+                plt.scatter(lons[i, -1], lats[i, -1], color='orange', marker='x',
+                            s=0.5, linewidth=0.25)
+
             if drifter is not None:
                 data = pd.read_csv(drifter)
                 lats = data['lat']
