@@ -1,6 +1,6 @@
 # octapy – Ocean Connectivity and Tracking Algorithms
 # Copyright (C) 2020  Jason Tilley
-
+import glob
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -34,6 +34,19 @@ def get_extent(grid):
     extent = [grid.lons.min(), grid.lons.max(),
               grid.lats.min(), grid.lats.max()]
     return extent
+
+def netcdf_to_csv(file_list, outfile):
+    df = pd.DataFrame()
+
+    for file in file_list:
+        ds = xr.open_dataset(file)
+        id = file.split('/')[-1].split('_output.nc')[0]
+        time = np.datetime64(ds['time'][-1].values, 's')
+        data = ds.to_array().isel(time=-1).to_series()[:,0]
+        row = pd.Series({'id': id, 'time': time}).append(data)
+        df = df.append(row, ignore_index=True)
+
+    df.to_csv(outfile, index=False)
 
 
 def plot_csv_output(file_list, extent, step=2, plot_type='lines', colors=None):

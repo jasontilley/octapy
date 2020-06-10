@@ -2,7 +2,7 @@
 # Copyright (C) 2020  Jason Tilley
 
 import glob
-from os import path
+from os import path, makedirs
 
 import numpy as np
 import urllib.request
@@ -268,7 +268,7 @@ def download_hycom_data(model):
         base_query = base_query + depth_query
 
     if not path.exists(model.data_dir):
-        os.makedirs(model.data_dir)
+        makedirs(model.data_dir)
 
     start_time = np.datetime64(model.data_date_range[0])
     end_time = np.datetime64(model.data_date_range[-1])
