@@ -163,16 +163,12 @@ class Grid:
         self.lats = self.lats.T[0]
         self.x = transformed[0, :, 0]
         self.y = transformed[:, 0, 1]
+
         x, y = np.meshgrid(self.x, self.y)
+        self.points = np.array([self.x, self.y])
+        coords = np.array([x.ravel(), y.ravel()]).T
 
-        if model.dims == 2:
-            self.points = np.array([self.x, self.y])
-
-        if model.dims == 3:
-            self.points = np.array([self.x, self.y, self.depths])
-
-        xy_coords = np.array([x.ravel(), y.ravel()]).T
-        self.tree = cKDTree(xy_coords, leafsize=model.leafsize)
+        self.tree = cKDTree(coords, leafsize=model.leafsize)
 
 
 # @jitclass([('lat', types.optional(types.float32[:])),
@@ -272,7 +268,8 @@ def download_hycom_data(model):
 
     start_time = np.datetime64(model.data_date_range[0])
     end_time = np.datetime64(model.data_date_range[-1])
-    date_range = np.arange(start_time, end_time, model.data_timestep)
+    date_range = np.arange(start_time, end_time + model.data_timestep,
+                           model.data_timestep)
 
     for date_time in date_range:
         curr_path = get_filepath(date_time, model.model, model.submodel,
@@ -327,24 +324,39 @@ def get_physical(particle, grid, model):
 def interp3d(particle, grid, model, power=1.0):
     # get the data here and feed to the interpolation functions
     leafsize = 3
+
+    # get the vertical indices
+    if model.dims == 3:
+        dist_matrix = np.tile(grid.depths,
+                              (len(particle.depth), 1)).T - particle.depth
+        depth_indices = np.abs(dist_matrix).argmin(axis=0)
+
+    # get the horizontal indices
     points = tuple(map(tuple, np.array([particle.x, particle.y]).T))
     distances, indices = grid.tree.query(points, k=leafsize, n_jobs=-1)
 
-    # this could be a bandaid and may fail when I add diffusion?
-    indices = indices[0]
-    data_shape = (1, 1, 385, 541)
-
+    data_shape = (1, 1, len(grid.lats), len(grid.lons))
     data = np.empty((len(indices), 5))
-    for i in range(len(indices)):
-        start = np.intc(np.unravel_index(indices[i], data_shape))
-        data[i] = np.array(get_data_at_index(particle.filepath, start, 2)).T[0]
 
+    # for each particle
+    for i in range(len(indices)):
+        # get the four coordinate indices in the netcdf file
+        start = np.intc(np.unravel_index(indices[i], data_shape))
+        if model.dims == 3:
+            start[1, :] = depth_indices[i]
+        # get the data at the indices for each grid node
+        for j, coord in zip(range(len(data)), start.T):
+            data[j] = np.array(get_data_at_index(particle.filepath, coord,
+                                                 model.dims)).T[0]
+
+    # prepare the u, v, w, temp, and sal values to be interpolated
     data = Data(data[:, 0], data[:, 1], data[:, 2], data[:, 3], data[:, 4])
     weights = (1. / distances ** power).astype(np.float32)
 
     if model.interp == 'idw':
         particle = interp_idw(particle, data, weights, dims=model.dims)
 
+    # This is likely not working in 3D
     else:
         rootgrp = Dataset(particle.filepath)
 
@@ -581,6 +593,81 @@ def run_2d_model(model, grid):
                               'v': (['release', 'time'], trajectory[..., 4]),
                               'temp': (['release', 'time'], trajectory[..., 5]),
                               'sal': (['release', 'time'], trajectory[..., 6])},
+                             coords={'release': np.arange(0, num),
+                                     'time': date_range})
+
+        nc_data.to_netcdf('output/'
+                          + np.atleast_1d(release['particle_id'])[i].astype(str)
+                          + '_' + model.output_file)
+        nc_data.close()
+
+def run_3d_model(model, grid):
+
+    release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
+                            dtype=[('particle_id', 'S8'),
+                                   ('num', 'i'),
+                                   ('start_lat', 'f4'),
+                                   ('start_lon', 'f4'),
+                                   ('start_depth', 'f4'),
+                                   ('start_time', '<M8[s]'),
+                                   ('days', 'f4')])
+
+    for i in range(0, len(np.atleast_1d(release))):
+        print('getting particle info for particle '
+              + np.atleast_1d(release['particle_id'])[i].astype(str))
+        # add model.timestep to represent the true period
+        #  model.timestep.astype(int)
+        date_range = np.arange(np.atleast_1d(release['start_time'])[i],
+                               np.atleast_1d(release['start_time'])[i]
+                               + np.timedelta64(
+                                   int(np.atleast_1d(release['days'])[i]
+                                       * 24 * 60 + model.timestep.astype(int)),
+                                   'm') * model.direction,
+                               model.timestep * model.direction)
+        # make array of dimensions (particle, time, data)
+        num = np.atleast_1d(release['num'])[i]
+        trajectory = np.empty((num, len(date_range), 8)) ###
+        lat = np.repeat(np.atleast_1d(release['start_lat'])[i], num)
+        lon = np.repeat(np.atleast_1d(release['start_lon'])[i], num)
+        depth = np.repeat(np.atleast_1d(release['start_depth'])[i], num)
+
+        particle = Particle(lat, lon, depth)
+        transformed = grid.tgt_crs.transform_points(grid.src_crs,
+                                                    lon, lat, depth).T ###
+        particle.x, particle.y, particle.depth = transformed[:3].astype(np.float32)###
+        particle.filepath = get_filepath(date_range[0], model.model,
+                                         model.submodel, model.data_dir)
+        particle.timestamp = date_range[0]
+        particle = get_physical(particle, grid, model)
+        for j in range(len(date_range)):
+            #particle.timestamp = date_range[j]
+            particle.filepath = get_filepath(particle.timestamp, model.model,
+                                             model.submodel, model.data_dir)
+            # if j.tolist().hour == 0:
+            #    print('getting physical data for ' + str(j))
+            particle_arr = np.array([particle.x, particle.y, particle.depth,
+                                     particle.u, particle.v, particle.w,
+                                     particle.temp, particle.sal]).T ###
+            trajectory[:, j, :] = particle_arr
+            particle = force_particle(particle, grid, model)
+
+        transformed = grid.src_crs.transform_points(grid.tgt_crs,
+                                                    trajectory[..., 0],
+                                                    trajectory[..., 1],
+                                                    trajectory[..., 2])
+        lons = transformed[..., 0]
+        lats = transformed[..., 1]
+        depths = transformed[..., 2]
+
+        # write the data to netcdf
+        nc_data = xr.Dataset({'lat': (['release', 'time'], lats),
+                              'lon': (['release', 'time'], lons),
+                              'depth': (['release', 'time'], depths),
+                              'u': (['release', 'time'], trajectory[..., 3]),
+                              'v': (['release', 'time'], trajectory[..., 4]),
+                              'w': (['release', 'time'], trajectory[..., 5]),
+                              'temp': (['release', 'time'], trajectory[..., 6]),
+                              'sal': (['release', 'time'], trajectory[..., 7])},
                              coords={'release': np.arange(0, num),
                                      'time': date_range})
 
