@@ -323,62 +323,71 @@ def get_physical(particle, grid, model):
 
 def interp3d(particle, grid, model, power=1.0):
     # get the data here and feed to the interpolation functions
-    leafsize = 3
+    leafsize = model.leafsize
 
-    # get the vertical indices
+    # get the vertical index of the nearest neighbor
     if model.dims == 3:
         dist_matrix = np.tile(grid.depths,
                               (len(particle.depth), 1)).T - particle.depth
         depth_indices = np.abs(dist_matrix).argmin(axis=0)
 
-    # get the horizontal indices
+    # get the horizontal indices and weights
     points = tuple(map(tuple, np.array([particle.x, particle.y]).T))
     distances, indices = grid.tree.query(points, k=leafsize, n_jobs=-1)
+    weights = (1. / distances ** power).astype(np.float32)
 
     data_shape = (1, 1, len(grid.lats), len(grid.lons))
-    data = np.empty((len(indices), 5))
+    data = np.empty((len(indices), len(indices.T), 5))
 
     # for each particle
     for i in range(len(indices)):
         # get the four coordinate indices in the netcdf file
         start = np.intc(np.unravel_index(indices[i], data_shape))
+
         if model.dims == 3:
             start[1, :] = depth_indices[i]
+
         # get the data at the indices for each grid node
-        for j, coord in zip(range(len(data)), start.T):
-            data[j] = np.array(get_data_at_index(particle.filepath, coord,
+        for j, coord in zip(range(len(indices.T)), start.T):
+            data[i,j] = np.array(get_data_at_index(particle.filepath, coord,
                                                  model.dims)).T[0]
 
-    # prepare the u, v, w, temp, and sal values to be interpolated
-    data = Data(data[:, 0], data[:, 1], data[:, 2], data[:, 3], data[:, 4])
-    weights = (1. / distances ** power).astype(np.float32)
+        # interpolate the u, v, w, temp, and sal values
+        if model.interp == 'idw':
+            particle.u = (weights * np.array(data[:, :, 0])).sum(axis=1) \
+                          / weights.sum(axis=1)
+            particle.v = (weights * np.array(data[:, :, 1])).sum(axis=1) \
+                          / weights.sum(axis=1)
+            particle.w = (weights * np.array(data[:, :, 2])).sum(axis=1) \
+                          / weights.sum(axis=1)
+            particle.temp = (weights * np.array(data[:, :, 3])).sum(axis=1) \
+                             / weights.sum(axis=1)
+            particle.sal = (weights * np.array(data[:, :, 4])).sum(axis=1) \
+                            / weights.sum(axis=1)
 
-    if model.interp == 'idw':
-        particle = interp_idw(particle, data, weights, dims=model.dims)
+        # This is likely not working in 3D
+        else:
+            rootgrp = Dataset(particle.filepath)
 
-    # This is likely not working in 3D
-    else:
-        rootgrp = Dataset(particle.filepath)
+            if model.dims == 2:
+                dims_tuple = (particle.x, particle.y)
 
-        if model.dims == 2:
-            dims_tuple = (particle.x, particle.y)
+            if model.dims == 3:
+                dims_tuple = (particle.x, particle.y, particle.depth)
+                particle.w = interpn(grid.points, rootgrp['w_velocity'][0].T,
+                                     dims_tuple, method=model.interp).item()
 
-        if model.dims == 3:
-            dims_tuple = (particle.x, particle.y, particle.depth)
-            particle.w = interpn(grid.points, rootgrp['w_velocity'][0].T,
+            particle.u = interpn(grid.points, rootgrp['u'][0].T,
                                  dims_tuple, method=model.interp).item()
 
-        particle.u = interpn(grid.points, rootgrp['u'][0].T,
-                             dims_tuple, method=model.interp).item()
+            particle.v = interpn(grid.points, rootgrp['v'][0].T,
+                                 dims_tuple, method=model.interp).item()
 
-        particle.v = interpn(grid.points, rootgrp['v'][0].T,
-                             dims_tuple, method=model.interp).item()
+            particle.temp = interpn(grid.points, rootgrp['temperature'][0].T,
+                                    dims_tuple, method=model.interp).item()
 
-        particle.temp = interpn(grid.points, rootgrp['temperature'][0].T,
-                                dims_tuple, method=model.interp).item()
-
-        particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
-                               dims_tuple, method=model.interp).item()
+            particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
+                                   dims_tuple, method=model.interp).item()
 
     return particle
 
