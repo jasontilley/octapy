@@ -50,6 +50,7 @@ class Model:
     direction -- forcing direction through time. Must be  1 for forward or -1
                  for backward
     dims -- dimensionality of the model, must be 2 or 3
+    diffusion -- if true, enables diffusion
     data_vars -- an numpy.ndarray of the variable names in the data file
     depth -- forcing depth if the model is 2-dimensional
     extent -- a list of extent coordinates as [minlat, maxlat, minlon, maxlon]
@@ -80,7 +81,7 @@ class Model:
     """
 
     def __init__(self, release_file=None, model=None, submodel=None,
-                 data_dir='data', direction=1, dims=2,
+                 data_dir='data', direction=1, dims=2, diffusion=False,
                  depth=None, extent=None, data_date_range=None,
                  timestep=np.timedelta64(60, 'm'),
                  data_freq=np.timedelta64(60, 'm'),
@@ -93,6 +94,7 @@ class Model:
         self.data_dir = data_dir
         self.direction = direction
         self.dims = dims
+        self.diffusion = diffusion
         self.depth = depth
         self.extent = extent
         self.data_date_range = data_date_range
@@ -463,10 +465,18 @@ def interp_for_time(particle, particle1, particle2, dims=2):
 
 def force_particle(particle, grid, model):
 
-    particle.x = (particle.x + model.timestep.item().seconds * particle.u
-                  * model.direction)
-    particle.y = (particle.y + model.timestep.item().seconds * particle.v
-                  * model.direction)
+    if model.diffusion == False:
+        diffusion1 = 0
+        diffusion2 = 0
+
+    if model.diffusion == True:
+        diffusion1 = np.random.normal(size=len(particle.x)) * .1
+        diffusion2 = np.random.normal(size=len(particle.x)) * .1
+
+    particle.x = (particle.x + model.timestep.item().seconds
+                  * (particle.u + diffusion1) * model.direction)
+    particle.y = (particle.y + model.timestep.item().seconds
+                  * (particle.v + diffusion2) * model.direction)
 
     if model.dims == 3:
         particle.depth = (particle.depth + model.timestep.item().seconds
