@@ -550,7 +550,7 @@ def add_row_to_arr(arr, particle):
 def run_2d_model(model, grid):
 
     release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
-                            dtype=[('particle_id', 'S8'),
+                            dtype=[('particle_id', 'S16'),
                                    ('num', 'i'),
                                    ('start_lat', 'f4'),
                                    ('start_lon', 'f4'),
@@ -623,7 +623,7 @@ def run_2d_model(model, grid):
 def run_3d_model(model, grid):
 
     release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
-                            dtype=[('particle_id', 'S8'),
+                            dtype=[('particle_id', 'S16'),
                                    ('num', 'i'),
                                    ('start_lat', 'f4'),
                                    ('start_lon', 'f4'),

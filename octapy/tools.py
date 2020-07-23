@@ -75,13 +75,24 @@ def plot_csv_output(file_list, extent, step=2, plot_type='lines', colors=None):
 
 
 def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
-                       colors=None, drifter=None):
+                       colors=None, drifter=None, contour_file=None,
+                       contour_idx=0):
     URL = 'http://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi'
     wmts = WebMapTileService(URL)
     layer = 'BlueMarble_NextGeneration'
     ax = plt.axes(projection=ccrs.PlateCarree())
     ax.add_wmts(wmts, layer, wmts_kwargs={'time': '2016-02-05'})
     ax.coastlines(resolution='10m', linewidth=0.1, color='white')
+
+    if contour_file is not None:
+        rootgrp = Dataset(contour_file)
+        lats = rootgrp['Latitude'][:].data
+        lons = rootgrp['Longitude'][:].data
+        data = rootgrp['temperature'][:].data[0, contour_idx]
+        ax.contourf(lons, lats, data,
+                    transform=ccrs.PlateCarree(),
+                    cmap='jet',
+                    levels=np.arange(15, 30, 0.1))
 
     if colors is None:
         colors = np.repeat('white', len(file_list))
@@ -121,6 +132,9 @@ def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
 
         ax.set_extent(extent)
 
+    fig = plt.gcf()
+    fig.set_size_inches(6.4, 4.12)
+    ax.set_position([0, 0, 1, 1])
     plt.savefig(splitext(nc_file)[0] + '.png', dpi=600)
     plt.close()
 
