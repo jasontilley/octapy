@@ -211,9 +211,10 @@ class Particle:
 
     """
 
-    def __init__(self, lat=None, lon=None, depth=None, timestamp=None, x=None,
-                 y=None, u=None, v=None, w=None, temp=None, sal=None,
+    def __init__(self, num=None, lat=None, lon=None, depth=None, timestamp=None,
+                 x=None, y=None, u=None, v=None, w=None, temp=None, sal=None,
                  filepath=None):
+        self.num = num
         self.lat = lat
         self.lon = lon
         self.depth = depth
@@ -478,11 +479,18 @@ def force_particle(particle, grid, model):
     particle.y = (particle.y + model.timestep.item().seconds
                   * (particle.v + diffusion2) * model.direction)
 
-    if model.dims == 3:
-        particle.depth = (particle.depth + model.timestep.item().seconds
-                          * particle.w * model.direction)
-
     particle.timestamp = particle.timestamp + model.timestep * model.direction
+
+    if model.dims == 3:
+
+        if model.vert_migration == False:
+            particle.depth = (particle.depth + model.timestep.item().seconds
+                              * particle.w * model.direction)
+
+        if model.vert_migration == True:
+            particle.depth = np.repeat(model.vert_array[particle.timestamp.tolist().hour],
+                                       particle.num)
+
     particle.filepath = get_filepath(particle.timestamp, model.model,
                                      model.submodel, model.data_dir)
     # update the particle's physical data
@@ -577,7 +585,7 @@ def run_2d_model(model, grid):
         lon = np.repeat(np.atleast_1d(release['start_lon'])[i], num)
         depth = np.repeat(np.atleast_1d(release['start_depth'])[i], num)
 
-        particle = Particle(lat, lon, depth)
+        particle = Particle(num, lat, lon, depth)
         transformed = grid.tgt_crs.transform_points(grid.src_crs,
                                                     lon,
                                                     lat).T
@@ -648,9 +656,15 @@ def run_3d_model(model, grid):
         trajectory = np.empty((num, len(date_range), 8)) ###
         lat = np.repeat(np.atleast_1d(release['start_lat'])[i], num)
         lon = np.repeat(np.atleast_1d(release['start_lon'])[i], num)
-        depth = np.repeat(np.atleast_1d(release['start_depth'])[i], num)
 
-        particle = Particle(lat, lon, depth)
+        if model.vert_migration == False:
+            depth = np.repeat(np.atleast_1d(release['start_depth'])[i], num)
+
+        if model.vert_migration == True:
+            depth = np.repeat(np.atleast_1d(model.vert_array[date_range[0].tolist().hour]),
+                                            num)
+
+        particle = Particle(num, lat, lon, depth)
         transformed = grid.tgt_crs.transform_points(grid.src_crs,
                                                     lon, lat, depth).T ###
         particle.x, particle.y, particle.depth = transformed[:3].astype(np.float32)###

@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import octapy
 from os.path import splitext
 from netCDF4 import Dataset
@@ -80,8 +81,16 @@ def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
     URL = 'http://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi'
     wmts = WebMapTileService(URL)
     layer = 'BlueMarble_NextGeneration'
+    #water = 'MODIS_Water_Mask'
     ax = plt.axes(projection=ccrs.PlateCarree())
+    ax.set_extent(extent)
     ax.add_wmts(wmts, layer, wmts_kwargs={'time': '2016-02-05'})
+    #ax.add_wmts(wmts, water, wmts_kwargs={'time': '2016-02-05'})
+    ocean = cfeature.NaturalEarthFeature('physical', 'ocean',
+                                                scale='10m', edgecolor='none',
+                                                facecolor='black')
+    ax.add_feature(ocean, linewidth=0.2)
+
     ax.coastlines(resolution='10m', linewidth=0.1, color='white')
 
     if contour_file is not None:
