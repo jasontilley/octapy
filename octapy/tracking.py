@@ -168,6 +168,10 @@ class Grid:
 
         x, y = np.meshgrid(self.x, self.y)
         self.points = np.array([self.x, self.y])
+        # VisibleDeprecationWarning: Creating an ndarray from ragged nested
+        # sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays
+        # with different lengths or shapes) is deprecated. If you meant to do
+        # this, you must specify 'dtype=object' when creating the ndarray
         coords = np.array([x.ravel(), y.ravel()]).T
 
         self.tree = cKDTree(coords, leafsize=model.leafsize)
@@ -341,6 +345,7 @@ def interp3d(particle, grid, model, power=1.0):
 
     data_shape = (1, 1, len(grid.lats), len(grid.lons))
     data = np.empty((len(indices), len(indices.T), 5))
+    data.fill(np.nan)
 
     # for each particle
     for i in range(len(indices)):
@@ -352,8 +357,20 @@ def interp3d(particle, grid, model, power=1.0):
 
         # get the data at the indices for each grid node
         for j, coord in zip(range(len(indices.T)), start.T):
-            data[i,j] = np.array(get_data_at_index(particle.filepath, coord,
-                                                 model.dims)).T[0]
+            for k in reversed(range(coord[1] + 1)):
+                data[i,j] = np.array(get_data_at_index(particle.filepath,
+                                                       coord,
+                                                       model.dims)).T[0]
+
+                # Fix issue caused by depth being greater than bathymetry. If
+                # depth is greater than bathymetry, set the depth to the next
+                # shallower sigma level
+
+                if not np.isnan(data).any():
+                    break
+
+                else:
+                    coord[1] -= 1
 
         # interpolate the u, v, w, temp, and sal values
         if model.interp == 'idw':
@@ -557,7 +574,7 @@ def add_row_to_arr(arr, particle):
 
 def run_2d_model(model, grid):
 
-    release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
+    release = np.genfromtxt(model.release_file, delimiter=',', skip_header=0,
                             dtype=[('particle_id', 'S16'),
                                    ('num', 'i'),
                                    ('start_lat', 'f4'),
@@ -630,7 +647,7 @@ def run_2d_model(model, grid):
 
 def run_3d_model(model, grid):
 
-    release = np.genfromtxt(model.release_file, delimiter=',', skip_header=1,
+    release = np.genfromtxt(model.release_file, delimiter=',', skip_header=0,
                             dtype=[('particle_id', 'S16'),
                                    ('num', 'i'),
                                    ('start_lat', 'f4'),

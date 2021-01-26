@@ -75,7 +75,7 @@ def plot_csv_output(file_list, extent, step=2, plot_type='lines', colors=None):
     plt.close()
 
 
-def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
+def plot_netcdf_output(file_list, extent, out_file=None, step=2, plot_type='lines',
                        colors=None, drifter=None, contour_file=None,
                        contour_idx=0):
     URL = 'http://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi'
@@ -144,7 +144,13 @@ def plot_netcdf_output(file_list, extent, step=2, plot_type='lines',
     fig = plt.gcf()
     fig.set_size_inches(6.4, 4.12)
     ax.set_position([0, 0, 1, 1])
-    plt.savefig(splitext(nc_file)[0] + '.png', dpi=600)
+
+    if out_file == None:
+        plt.savefig(splitext(nc_file)[0] + '.png', dpi=600)
+
+    else:
+        plt.savefig(out_file, dpi=600)
+
     plt.close()
 
 
