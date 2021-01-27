@@ -168,7 +168,7 @@ class Grid:
         self.y = transformed[:, 0, 1]
 
         x, y = np.meshgrid(self.x, self.y)
-        self.points = np.array([self.x, self.y])
+        self.points = np.array([self.x, self.y], dtype=object)
         # VisibleDeprecationWarning: Creating an ndarray from ragged nested
         # sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays
         # with different lengths or shapes) is deprecated. If you meant to do
