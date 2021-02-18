@@ -7,3 +7,4 @@ ctypedef struct _Data "Data":
     vector[float] w
     vector[float] temp
     vector[float] sal
+    vector[float] ssh

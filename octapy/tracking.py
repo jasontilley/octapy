@@ -218,7 +218,7 @@ class Particle:
 
     def __init__(self, num=None, lat=None, lon=None, depth=None, timestamp=None,
                  x=None, y=None, u=None, v=None, w=None, temp=None, sal=None,
-                 filepath=None):
+                 ssh=None, filepath=None):
         self.num = num
         self.lat = lat
         self.lon = lon
@@ -231,6 +231,7 @@ class Particle:
         self.w = w
         self.temp = temp
         self.sal = sal
+        self.ssh = ssh
         self.filepath = filepath
 
 
@@ -247,6 +248,7 @@ def deepcopy(particle):
     particle_copy.w = particle.w
     particle_copy.temp = particle.temp
     particle_copy.sal = particle.sal
+    particle_copy.ssh = particle.ssh
     particle_copy.filepath = particle.filepath
 
     return particle_copy
@@ -265,7 +267,7 @@ def download_hycom_data(model):
         base_prefix = 'http://ncss.hycom.org/thredds/ncss/{0}/{1}/hrly'
 
     base_query = ('?var=salinity&var=temperature&var=u&var=v&var=w_velocity'
-                  + '&time_start={0}&time_end={0}&accept=netcdf')
+                  + '&var=ssh&time_start={0}&time_end={0}&accept=netcdf')
 
     if model.depth is not -1:
         depth_query = "&vertCoord=" + str(model.depth)
@@ -288,7 +290,12 @@ def download_hycom_data(model):
                                         str(date_time.astype(object).year))
             query = base_query.format(str(date_time))
             url = prefix + query
-            urllib.request.urlretrieve(url, curr_path)
+
+            try:
+                urllib.request.urlretrieve(url, curr_path)
+
+            except urllib.error.HTTPError as err:
+                print('HTTPError at url!: ' + url)
 
         else:
             print('File already exists!')
@@ -345,7 +352,7 @@ def interp3d(particle, grid, model, power=1.0):
     weights = (1. / distances ** power).astype(np.float32)
 
     data_shape = (1, 1, len(grid.lats), len(grid.lons))
-    data = np.empty((len(indices), len(indices.T), 5))
+    data = np.empty((len(indices), len(indices.T), 6))
     data.fill(np.nan)
 
     # for each particle
@@ -359,21 +366,22 @@ def interp3d(particle, grid, model, power=1.0):
         # get the data at the indices for each grid node
         for j, coord in zip(range(len(indices.T)), start.T):
             for k in reversed(range(coord[1] + 1)):
+                surf_coord = np.concatenate([np.array([0]), coord[2::]])
                 data[i,j] = np.array(get_data_at_index(particle.filepath,
-                                                       coord,
+                                                       coord, surf_coord,
                                                        model.dims)).T[0]
 
                 # Fix issue caused by depth being greater than bathymetry. If
                 # depth is greater than bathymetry, set the depth to the next
                 # shallower sigma level
 
-                if not np.isnan(data).any():
+                if not np.isnan(data[...,:2]).any():
                     break
 
                 else:
                     coord[1] -= 1
 
-        # interpolate the u, v, w, temp, and sal values
+        # interpolate the u, v, w, temp, sal, and ssh values
         if model.interp == 'idw':
             particle.u = (weights * np.array(data[:, :, 0])).sum(axis=1) \
                           / weights.sum(axis=1)
@@ -385,6 +393,8 @@ def interp3d(particle, grid, model, power=1.0):
                              / weights.sum(axis=1)
             particle.sal = (weights * np.array(data[:, :, 4])).sum(axis=1) \
                             / weights.sum(axis=1)
+            particle.ssh = (weights * np.array(data[:, :, 5])).sum(axis=1) \
+                           / weights.sum(axis=1)
 
         # This is likely not working in 3D
         else:
@@ -409,6 +419,10 @@ def interp3d(particle, grid, model, power=1.0):
 
             particle.sal = interpn(grid.points, rootgrp['salinity'][0].T,
                                    dims_tuple, method=model.interp).item()
+
+            particle.ssh = interpn(grid.points, rootgrp['ssh'][0].T,
+                                   dims_tuple, method=model.interp).item()
+
 
     return particle
 
@@ -461,6 +475,9 @@ def interp_for_time(particle, particle1, particle2, dims=2):
 
     f = interp1d(points, np.array([particle1.sal, particle2.sal]).T)
     particle.sal = f(xi).astype(np.float32)
+
+    f = interp1d(points, np.array([particle1.ssh, particle2.ssh]).T)
+    particle.ssh = f(xi).astype(np.float32)
 
     if dims == 3:
         f = interp1d(points, np.array([particle1.w, particle2.w]).T)
@@ -520,7 +537,7 @@ def force_particle(particle, grid, model):
 def add_row_to_arr(arr, particle):
     row = np.array([particle.timestamp, particle.y, particle.x,
                     particle.depth, particle.u, particle.v, particle.w,
-                    particle.temp, particle.sal])
+                    particle.temp, particle.sal, particle.ssh])
     arr = np.vstack([arr, row])
 
     return arr
@@ -598,7 +615,7 @@ def run_2d_model(model, grid):
                                model.timestep * model.direction)
         # make array of dimensions (particle, time, data)
         num = np.atleast_1d(release['num'])[i]
-        trajectory = np.empty((num, len(date_range), 7))
+        trajectory = np.empty((num, len(date_range), 8))
         lat = np.repeat(np.atleast_1d(release['start_lat'])[i], num)
         lon = np.repeat(np.atleast_1d(release['start_lon'])[i], num)
         depth = np.repeat(np.atleast_1d(release['start_depth'])[i], num)
@@ -620,7 +637,7 @@ def run_2d_model(model, grid):
             #    print('getting physical data for ' + str(j))
             particle_arr = np.array([particle.x, particle.y, particle.depth,
                                      particle.u, particle.v, particle.temp,
-                                     particle.sal]).T
+                                     particle.sal, particle.ssh]).T
             trajectory[:, j, :] = particle_arr
             particle = force_particle(particle, grid, model)
 
@@ -637,7 +654,8 @@ def run_2d_model(model, grid):
                               'u': (['release', 'time'], trajectory[..., 3]),
                               'v': (['release', 'time'], trajectory[..., 4]),
                               'temp': (['release', 'time'], trajectory[..., 5]),
-                              'sal': (['release', 'time'], trajectory[..., 6])},
+                              'sal': (['release', 'time'], trajectory[..., 6]),
+                              'ssh': (['release', 'time'], trajectory[..., 7])},
                              coords={'release': np.arange(0, num),
                                      'time': date_range})
 
@@ -671,7 +689,7 @@ def run_3d_model(model, grid):
                                model.timestep * model.direction)
         # make array of dimensions (particle, time, data)
         num = np.atleast_1d(release['num'])[i]
-        trajectory = np.empty((num, len(date_range), 8)) ###
+        trajectory = np.empty((num, len(date_range), 9)) ###
         lat = np.repeat(np.atleast_1d(release['start_lat'])[i], num)
         lon = np.repeat(np.atleast_1d(release['start_lon'])[i], num)
 
@@ -698,7 +716,8 @@ def run_3d_model(model, grid):
             #    print('getting physical data for ' + str(j))
             particle_arr = np.array([particle.x, particle.y, particle.depth,
                                      particle.u, particle.v, particle.w,
-                                     particle.temp, particle.sal]).T ###
+                                     particle.temp, particle.sal,
+                                     particle.ssh]).T ###
             trajectory[:, j, :] = particle_arr
             particle = force_particle(particle, grid, model)
 
@@ -718,7 +737,8 @@ def run_3d_model(model, grid):
                               'v': (['release', 'time'], trajectory[..., 4]),
                               'w': (['release', 'time'], trajectory[..., 5]),
                               'temp': (['release', 'time'], trajectory[..., 6]),
-                              'sal': (['release', 'time'], trajectory[..., 7])},
+                              'sal': (['release', 'time'], trajectory[..., 7]),
+                              'ssh': (['release', 'time'], trajectory[..., 8])},
                              coords={'release': np.arange(0, num),
                                      'time': date_range})
 

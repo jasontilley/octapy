@@ -10,6 +10,7 @@ import octapy
 from os.path import splitext
 from netCDF4 import Dataset
 from pyproj import Geod
+from pydap.client import open_url
 from owslib.wmts import WebMapTileService
 
 
@@ -256,6 +257,11 @@ def run_skill_analysis(drifter_file, drifter_id, skill_files, date_range, grid,
               to calculate the skill
     data_freq -- a pandas Timedelta object representing the frequency of the
                  drifter data
+
+    Returns:
+
+    a numpy array of particle times, trajectory lengths, separation distances,
+    and skill scores
     """
 
     geod = Geod(ellps="WGS84")
