@@ -372,10 +372,11 @@ def interp3d(particle, grid, model, power=1.0):
                                                        model.dims)).T[0]
 
                 # Fix issue caused by depth being greater than bathymetry. If
-                # depth is greater than bathymetry, set the depth to the next
-                # shallower sigma level
+                # depth is greater than bathymetry, set the depth to the deepest
+                # sigma level with data
+                data = np.where(data == 1.2676506002282294e+30, np.nan, data)
 
-                if not np.isnan(data[...,:2]).any():
+                if not np.isnan(data[..., :2]).any():
                     break
 
                 else:
