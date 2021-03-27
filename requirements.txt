@@ -2,7 +2,6 @@ geos
 netcdf4
 pkgconfig
 cython
-python-epsg
 gdal
 matplotlib
 mock
@@ -18,3 +17,4 @@ shapely
 six
 xarray
 pydap
+cartopy
