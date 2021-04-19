@@ -126,7 +126,7 @@ def plot_netcdf_output(file_list, extent, out_file=None, step=2, plot_type='line
                 data = pd.read_csv(drifter)
                 lats = data['lat']
                 lons = data['lon']
-                plt.plot(lons, lats, color='orange', linewidth=0.25)
+                plt.plot(lons, lats, color='orange', linewidth=1.00)
 
         if plot_type == 'scatter':
 
