@@ -6,8 +6,8 @@ This package is pre-release and currently under maintenance.
 ## Introduction
 
 ## Installation
-Installation on the below systems require the installing GDAL, then setting up
-an virtual python 3.X environment to install the Python depenencies.
+Installation on the below systems require installing GDAL, then setting up a
+virtual python environment to install the Python depenencies.
 
 ### Ubuntu
 
