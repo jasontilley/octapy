@@ -6,12 +6,12 @@ This package is pre-release and currently under maintenance.
 ## Introduction
 
 ## Installation
-Installation on the below systems involve the steps of installing GDAL, then
-setting up an virtual python 3.X environment to install the Python depenencies.
+Installation on the below systems require the installing GDAL, then setting up
+an virtual python 3.X environment to install the Python depenencies.
 
 ### Ubuntu
 
-Install GDAL (and GEOS??) , reproduced from here
+Install GDAL and GEOS, reproduced from here:
 https://mothergeo-py.readthedocs.io/en/latest/development/how-to/gdal-ubuntu-pkg.html
 and here http://www.sarasafavi.com/installing-gdalogr-on-ubuntu.html
 
