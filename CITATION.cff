@@ -9,6 +9,7 @@ authors:
   orcid: "https://orcid.org/0000-0002-6059-8097"
 - family-names: "Trigg"
   given-names: "Robert"
+  orcid: "https://orcid.org/0000-0002-5597-1782"
 title: "octapy - ocean connectivity and tracking algorithms"
 version: 1.0
 date-released: 2022-02-28
