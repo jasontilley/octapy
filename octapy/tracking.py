@@ -10,8 +10,8 @@ import pandas as pd
 import xarray as xr
 import cartopy.crs as ccrs
 from netCDF4 import Dataset
-from numba.experimental import jitclass
-from numba import types
+#from numba.experimental import jitclass
+#from numba import types
 from scipy.interpolate import interpn, interp1d
 from scipy.spatial.ckdtree import cKDTree
 
