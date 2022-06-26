@@ -261,10 +261,10 @@ def transform(src_crs, tgt_crs, lon, lat):
 
 def download_hycom_data(model):
 
-    if model.submodel == 'GOMl0.04/expt_20.1':
-        base_prefix = 'http://ncss.hycom.org/thredds/ncss/grid/{0}/{1}'
-    else:
-        base_prefix = 'http://ncss.hycom.org/thredds/ncss/{0}/{1}/hrly'
+    # if model.submodel == 'GOMl0.04/expt_20.1':
+    #     base_prefix = 'http://ncss.hycom.org/thredds/ncss/grid/{0}/{1}'
+    # else:
+    base_prefix = 'http://ncss.hycom.org/thredds/ncss/grid/{0}/{1}/hrly'
 
     base_query = ('?var=salinity&var=temperature&var=u&var=v&var=w_velocity'
                   + '&var=ssh&time_start={0}&time_end={0}&accept=netcdf')
