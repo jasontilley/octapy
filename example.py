@@ -35,7 +35,7 @@ model.depth = 15
 model.output_file = 'output.nc'
 
 # download the data
-octapy.tracking.download_data(model)
+octapy.tracking.download_hycom_data(model)
 
 # initialize the grid
 grid = octapy.Grid(model)
