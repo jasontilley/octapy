@@ -267,11 +267,13 @@ def download_hycom_data(model):
     base_prefix = 'https://ncss.hycom.org/thredds/ncss/grid/{0}/{1}/hrly'
 
     base_query = ('?var=salinity&var=temperature&var=u&var=v&var=w_velocity'
+                  + '&disableLLSubset=on&disableProjSubset=on&horizStride=1'
                   + '&var=ssh&time_start={0}&time_end={0}&accept=netcdf')
 
-    if model.depth is not -1:
-        depth_query = "&vertCoord=" + str(model.depth)
-        base_query = base_query + depth_query
+    # had to be removed because of adding ssh
+    # if model.depth is not -1:
+    #     depth_query = "&vertCoord=" + str(model.depth)
+    #     base_query = base_query + depth_query
 
     if not path.exists(model.data_dir):
         makedirs(model.data_dir)
