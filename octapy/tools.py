@@ -27,7 +27,7 @@ def get_filepath(datetime64, model_name, submodel_name, data_dir):
     datetime64s = np.datetime64(datetime64s, 's')
     filepath = (data_dir + '/'
                 + (''.join(filter(lambda x: x.isdigit(), str(datetime64)))
-                   + '.' + model_name + '.' + submodel_name.replace('/', '.')
+                   + '00.' + model_name + '.' + submodel_name.replace('/', '.')
                    + '.nc'))
     return filepath
 
