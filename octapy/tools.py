@@ -26,8 +26,14 @@ def get_filepath(datetime64, model_name, submodel_name, data_dir):
     datetime64s = np.datetime64(datetime64s, 'h')
     datetime64s = np.datetime64(datetime64s, 's')
     filepath = (data_dir + '/'
+<<<<<<< HEAD
                 + (''.join(filter(lambda x: x.isdigit(), str(datetime64)))
                    + '00.' + model_name + '.' + submodel_name.replace('/', '.')
+=======
+                + (''.join(filter(lambda x: x.isdigit(), 
+                           str(datetime64.astype('datetime64[s]'))))
+                   + '.' + model_name + '.' + submodel_name.replace('/', '.')
+>>>>>>> 3ed5b73 (fixed issue caused by missing datetime64 dtype specification)
                    + '.nc'))
     return filepath
 

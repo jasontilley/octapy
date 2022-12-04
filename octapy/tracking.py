@@ -312,8 +312,8 @@ def get_physical(particle, grid, model):
 
         for i in range(1, 24):
             new_timestamp = particle.timestamp - np.timedelta64(i, 'h')
-            file1 = get_filepath(new_timestamp, model.model, model.submodel,
-                                 model.data_dir)
+            file1 = get_filepath(new_timestamp.astype('datetime64[s]'), 
+                                 model.model, model.submodel, model.data_dir)
             if path.isfile(file1):
                 particle1 = deepcopy(particle)
                 particle1.timestamp = new_timestamp
@@ -322,8 +322,8 @@ def get_physical(particle, grid, model):
 
         for i in range(1, 24):
             new_timestamp = particle.timestamp + np.timedelta64(i, 'h')
-            file2 = get_filepath(new_timestamp, model.model, model.submodel,
-                                 model.data_dir)
+            file2 = get_filepath(new_timestamp.astype('datetime64[s]'), 
+                                 model.model, model.submodel, model.data_dir)
             if path.isfile(file2):
                 particle2 = deepcopy(particle)
                 particle2.timestamp = new_timestamp
